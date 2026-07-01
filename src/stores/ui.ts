@@ -10,6 +10,8 @@ interface UiState {
   reducedMotionOverride: boolean | null;
   paletteOpen: boolean;
   hostOpen: boolean;
+  /** Whether the "Install app" guide (Android prompt + iOS steps) is open. */
+  installOpen: boolean;
   setTheme: (t: Theme) => void;
   toggleTheme: () => void;
   toggleSound: () => void;
@@ -17,6 +19,7 @@ interface UiState {
   setPaletteOpen: (v: boolean) => void;
   toggleHost: () => void;
   setHostOpen: (v: boolean) => void;
+  setInstallOpen: (v: boolean) => void;
 }
 
 export const useUiStore = create<UiState>()(
@@ -27,6 +30,7 @@ export const useUiStore = create<UiState>()(
       reducedMotionOverride: null,
       paletteOpen: false,
       hostOpen: false,
+      installOpen: false,
       setTheme: (theme) => set({ theme }),
       toggleTheme: () => set((s) => ({ theme: s.theme === "dark" ? "light" : "dark" })),
       toggleSound: () => set((s) => ({ sound: !s.sound })),
@@ -34,6 +38,7 @@ export const useUiStore = create<UiState>()(
       setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
       toggleHost: () => set((s) => ({ hostOpen: !s.hostOpen })),
       setHostOpen: (hostOpen) => set({ hostOpen }),
+      setInstallOpen: (installOpen) => set({ installOpen }),
     }),
     {
       name: "ff-ui",

@@ -2,9 +2,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, ArrowRight, Check, Sparkles, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Download, Sparkles, X } from "lucide-react";
 import { useUserStore } from "@/stores/user";
+import { useUiStore } from "@/stores/ui";
 import { useHydrated } from "@/hooks/use-hydrated";
+import { useInstallPrompt } from "@/hooks/use-install-prompt";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -13,9 +15,11 @@ interface Step {
   body: string;
   /** CSS selector of the element to spotlight; null = centered welcome/finish. */
   target: string | null;
+  /** Optional inline call-to-action rendered in the card. */
+  action?: "install";
 }
 
-const STEPS: Step[] = [
+const BASE_STEPS: Step[] = [
   {
     title: "Welcome to Football Fever",
     body: "Your group's home base for World Cup 2026 — live scores, predictions, party games and (friendly) trash talk. Here's the 20-second tour.",
@@ -58,6 +62,14 @@ const STEPS: Step[] = [
   },
 ];
 
+/** Inserted before the final step (unless already installed): install-to-home. */
+const INSTALL_STEP: Step = {
+  title: "Install it on your phone",
+  body: "Add Football Fever to your home screen for a full-screen, offline-ready match day. On Android it's one tap; on iPhone use Safari's Share → Add to Home Screen.",
+  target: '[data-tour="install"]',
+  action: "install",
+};
+
 const PAD = 8; // spotlight padding around the target
 const CARD_W = 340;
 
@@ -66,14 +78,23 @@ export function GuidedTour() {
   const onboarded = useUserStore((s) => s.onboarded);
   const tourDone = useUserStore((s) => s.tourDone);
   const completeTour = useUserStore((s) => s.completeTour);
+  const setInstallOpen = useUiStore((s) => s.setInstallOpen);
+  const { isStandalone } = useInstallPrompt();
   const reduce = useReducedMotion();
 
   const [i, setI] = useState(0);
   const [rect, setRect] = useState<DOMRect | null>(null);
 
+  // Slot the install step in just before the closing "Oracle orb" step, unless
+  // the app is already running installed (then there's nothing to install).
+  const steps: Step[] = isStandalone
+    ? BASE_STEPS
+    : [...BASE_STEPS.slice(0, -1), INSTALL_STEP, BASE_STEPS[BASE_STEPS.length - 1]!];
+  const stepCount = steps.length;
+
   const active = hydrated && onboarded && !tourDone;
-  const step = STEPS[i]!;
-  const isLast = i === STEPS.length - 1;
+  const step = steps[Math.min(i, stepCount - 1)]!;
+  const isLast = i >= stepCount - 1;
 
   const findTarget = useCallback((): HTMLElement | null => {
     if (!step.target) return null;
@@ -119,12 +140,12 @@ export function GuidedTour() {
     if (!active) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") finish();
-      else if (e.key === "ArrowRight") setI((p) => Math.min(p + 1, STEPS.length - 1));
+      else if (e.key === "ArrowRight") setI((p) => Math.min(p + 1, stepCount - 1));
       else if (e.key === "ArrowLeft") setI((p) => Math.max(p - 1, 0));
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [active, finish]);
+  }, [active, finish, stepCount]);
 
   if (!active || typeof document === "undefined") return null;
 
@@ -183,13 +204,13 @@ export function GuidedTour() {
           <div className="relative h-1 w-full bg-white/10">
             <div
               className="h-full bg-electric transition-[width] duration-300"
-              style={{ width: `${((i + 1) / STEPS.length) * 100}%` }}
+              style={{ width: `${((i + 1) / stepCount) * 100}%` }}
             />
           </div>
           <div className="p-5">
             <div className="mb-2 flex items-center justify-between">
               <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-electric">
-                <Sparkles className="h-3.5 w-3.5" /> Tour · {i + 1}/{STEPS.length}
+                <Sparkles className="h-3.5 w-3.5" /> Tour · {i + 1}/{stepCount}
               </span>
               <button
                 onClick={finish}
@@ -201,6 +222,19 @@ export function GuidedTour() {
             </div>
             <h3 className="font-display text-lg font-bold">{step.title}</h3>
             <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{step.body}</p>
+
+            {step.action === "install" && (
+              <Button
+                variant="electric"
+                className="mt-4 w-full"
+                onClick={() => {
+                  finish();
+                  setInstallOpen(true);
+                }}
+              >
+                <Download className="h-4 w-4" /> Install Football Fever
+              </Button>
+            )}
 
             <div className="mt-5 flex items-center justify-between gap-2">
               <button
@@ -220,7 +254,7 @@ export function GuidedTour() {
                     <Check className="h-4 w-4" /> Done
                   </Button>
                 ) : (
-                  <Button size="sm" onClick={() => setI((p) => Math.min(p + 1, STEPS.length - 1))}>
+                  <Button size="sm" onClick={() => setI((p) => Math.min(p + 1, stepCount - 1))}>
                     Next <ArrowRight className="h-4 w-4" />
                   </Button>
                 )}

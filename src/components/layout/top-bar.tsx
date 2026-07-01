@@ -9,6 +9,7 @@ import { Icon } from "@/components/shared/icon";
 import { Button } from "@/components/ui/button";
 import { useUiStore } from "@/stores/ui";
 import { NotificationsButton } from "./notifications-button";
+import { InstallButton } from "./install-button";
 import { ProfileMenu } from "./profile-menu";
 
 export function TopBar() {
@@ -86,6 +87,7 @@ export function TopBar() {
               {sound ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5 text-muted-foreground" />}
             </Button>
 
+            <InstallButton />
             <NotificationsButton />
             <ProfileMenu />
           </div>
