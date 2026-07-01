@@ -29,12 +29,17 @@ export const useNotificationStore = create<NotificationsState>()(
     (set, get) => ({
       items: seed(),
       push: (n) =>
-        set((s) => ({
-          items: [
-            { id: n.id ?? nanoid(8), read: false, createdAt: new Date().toISOString(), ...n },
-            ...s.items,
-          ].slice(0, 50),
-        })),
+        set((s) => {
+          // Stable ids (e.g. backend feed events) must never double-add across
+          // reloads or overlapping polls.
+          if (n.id && s.items.some((i) => i.id === n.id)) return s;
+          return {
+            items: [
+              { id: n.id ?? nanoid(8), read: false, createdAt: new Date().toISOString(), ...n },
+              ...s.items,
+            ].slice(0, 50),
+          };
+        }),
       markRead: (id) =>
         set((s) => ({ items: s.items.map((i) => (i.id === id ? { ...i, read: true } : i)) })),
       markAllRead: () => set((s) => ({ items: s.items.map((i) => ({ ...i, read: true })) })),

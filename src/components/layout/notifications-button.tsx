@@ -1,5 +1,6 @@
 "use client";
-import { Bell, CheckCheck } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Bell, BellRing, CheckCheck } from "lucide-react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -29,6 +30,23 @@ export function NotificationsButton() {
   const reduced = useReducedMotion();
   const { play } = useSound();
   const { buzz } = useHaptics();
+
+  // OS-level alert permission (kickoff pings + full-time scores surface even
+  // when the tab is backgrounded). We only prompt on an explicit tap.
+  const [perm, setPerm] = useState<NotificationPermission | "unsupported">("unsupported");
+  useEffect(() => {
+    if (typeof Notification !== "undefined") setPerm(Notification.permission);
+  }, []);
+  const enableAlerts = async () => {
+    if (typeof Notification === "undefined") return;
+    play("click");
+    buzz("tap");
+    try {
+      setPerm(await Notification.requestPermission());
+    } catch {
+      /* dismissed */
+    }
+  };
 
   const handleMarkAll = () => {
     markAllRead();
@@ -135,14 +153,26 @@ export function NotificationsButton() {
                 )}
               </AnimatePresence>
             </div>
-            <motion.button
-              onClick={handleMarkAll}
-              whileHover={reduced ? undefined : { y: -2 }}
-              whileTap={{ scale: 0.94 }}
-              className="flex items-center gap-1.5 rounded-full px-2 py-1 text-xs text-muted-foreground transition hover:text-foreground"
-            >
-              <CheckCheck className="h-3.5 w-3.5" /> Mark all read
-            </motion.button>
+            <div className="flex items-center gap-1">
+              {hydrated && perm === "default" && (
+                <motion.button
+                  onClick={enableAlerts}
+                  whileHover={reduced ? undefined : { y: -2 }}
+                  whileTap={{ scale: 0.94 }}
+                  className="flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium text-electric transition hover:text-electric/80"
+                >
+                  <BellRing className="h-3.5 w-3.5" /> Enable alerts
+                </motion.button>
+              )}
+              <motion.button
+                onClick={handleMarkAll}
+                whileHover={reduced ? undefined : { y: -2 }}
+                whileTap={{ scale: 0.94 }}
+                className="flex items-center gap-1.5 rounded-full px-2 py-1 text-xs text-muted-foreground transition hover:text-foreground"
+              >
+                <CheckCheck className="h-3.5 w-3.5" /> Mark all read
+              </motion.button>
+            </div>
           </SheetHeader>
         </div>
         <div className="max-h-[calc(100dvh-5rem)] space-y-1.5 overflow-y-auto px-3 pb-6">

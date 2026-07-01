@@ -73,6 +73,20 @@ export async function fetchMessages(
   }
 }
 
+/** Record/refresh me in the durable community roster. Best-effort. */
+export async function registerMe(input: HeartbeatInput): Promise<void> {
+  try {
+    await fetch(`/api/people`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify(input),
+    });
+  } catch {
+    // best-effort; the roster refresh is not user-visible
+  }
+}
+
 export async function publishMessage(roomId: string, msg: ChatMessage): Promise<void> {
   try {
     await fetch(`/api/rooms/${enc(roomId)}/messages`, {

@@ -16,6 +16,10 @@ import type { ChatMessage, PresenceStatus } from "@/types";
 const PRESENCE_TTL_MS = 15_000;
 /** Idle rooms self-clean after this long with no writes. */
 const ROOM_TTL_SEC = 60 * 60 * 24;
+/** The community roster is kept far longer than an ephemeral room. */
+const PEOPLE_TTL_SEC = 60 * 60 * 24 * 45;
+/** A return after this much quiet counts as a fresh visit. */
+const SESSION_GAP_MS = 30 * 60_000;
 /** Cap on retained chat history per room. */
 const MSG_CAP = 120;
 
@@ -27,6 +31,20 @@ export interface RoomMember {
   favoriteTeamId?: string;
   /** Last heartbeat, epoch ms. */
   ts: number;
+}
+
+/** A durable record of someone who has joined — the community roster. */
+export interface RegisteredPerson {
+  userId: string;
+  name: string;
+  avatar: string;
+  favoriteTeamId?: string;
+  /** First time we ever saw them, epoch ms. */
+  firstSeen: number;
+  /** Most recent activity, epoch ms. */
+  lastSeen: number;
+  /** Distinct sessions (a return after >30min of quiet counts as a new one). */
+  visits: number;
 }
 
 /** A stored chat message: the client ChatMessage plus a server receipt stamp. */
@@ -59,8 +77,13 @@ interface MemRoom {
   messages: StoredMessage[];
 }
 // Module-level singletons survive across requests within one server instance.
-const g = globalThis as unknown as { __ffRooms?: Map<string, MemRoom> };
+const g = globalThis as unknown as {
+  __ffRooms?: Map<string, MemRoom>;
+  __ffPeople?: Map<string, RegisteredPerson>;
+};
 const memory: Map<string, MemRoom> = (g.__ffRooms ??= new Map());
+const memPeople: Map<string, RegisteredPerson> = (g.__ffPeople ??= new Map());
+const PEOPLE_KEY = "ff:people";
 
 function memRoom(roomId: string): MemRoom {
   let r = memory.get(roomId);
@@ -171,6 +194,64 @@ export async function getMessages(
   return raw
     .map((v) => safeParse<StoredMessage>(v))
     .filter((m): m is StoredMessage => Boolean(m) && m!.ts > since);
+}
+
+/* --------------------------- people registry --------------------------- */
+
+/**
+ * Record (or refresh) a person in the durable community roster. Returns the
+ * stored record and whether this is the first time we've ever seen them — used
+ * to announce newcomers to the room.
+ */
+export async function registerPerson(input: {
+  userId: string;
+  name: string;
+  avatar: string;
+  favoriteTeamId?: string;
+}): Promise<{ person: RegisteredPerson; isNew: boolean }> {
+  const now = Date.now();
+  const redis = getRedis();
+
+  const build = (existing: RegisteredPerson | null): RegisteredPerson => {
+    const returning = existing && now - existing.lastSeen > SESSION_GAP_MS;
+    return {
+      userId: input.userId,
+      name: input.name,
+      avatar: input.avatar,
+      favoriteTeamId: input.favoriteTeamId,
+      firstSeen: existing?.firstSeen ?? now,
+      lastSeen: now,
+      visits: (existing?.visits ?? 0) + (!existing || returning ? 1 : 0),
+    };
+  };
+
+  if (!redis) {
+    const existing = memPeople.get(input.userId) ?? null;
+    const person = build(existing);
+    memPeople.set(input.userId, person);
+    return { person, isNew: !existing };
+  }
+
+  const raw = (await redis.hget(PEOPLE_KEY, input.userId)) as string | null;
+  const existing = raw ? safeParse<RegisteredPerson>(raw) : null;
+  const person = build(existing);
+  await redis.hset(PEOPLE_KEY, { [input.userId]: JSON.stringify(person) });
+  await redis.expire(PEOPLE_KEY, PEOPLE_TTL_SEC);
+  return { person, isNew: !existing };
+}
+
+/** The whole roster, most-recently-active first. */
+export async function getPeople(): Promise<RegisteredPerson[]> {
+  const redis = getRedis();
+  if (!redis) {
+    return [...memPeople.values()].sort((a, b) => b.lastSeen - a.lastSeen);
+  }
+  const raw = (await redis.hgetall(PEOPLE_KEY)) as Record<string, string> | null;
+  if (!raw) return [];
+  return Object.values(raw)
+    .map((v) => safeParse<RegisteredPerson>(v))
+    .filter((p): p is RegisteredPerson => Boolean(p))
+    .sort((a, b) => b.lastSeen - a.lastSeen);
 }
 
 function safeParse<T>(value: unknown): T | null {
