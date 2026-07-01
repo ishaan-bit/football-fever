@@ -18,6 +18,8 @@ export default async function TrashTalkPage({
   return (
     <PageShell size="wide" className="space-y-7">
       <PageHeader
+        scene="fire"
+        seed="roast-room"
         eyebrow="Trash Talk"
         title={
           <span className="flex items-center gap-2.5">

@@ -63,6 +63,7 @@ export default function PredictionsPage() {
   return (
     <PageShell className="space-y-8">
       <PageHeader
+        scene="ball"
         eyebrow="Friendly League"
         title="Predictions"
         description="Call the matches before they kick off. The bolder the bet, the bigger the points — settle up with the room at full time."

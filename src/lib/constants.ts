@@ -51,12 +51,12 @@ export const IMAGERY = {
     "https://images.unsplash.com/photo-1459865264687-595d652de67e?w=1920&q=80&auto=format&fit=crop",
   ],
   pitch:
-    "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=1600&q=80&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1556056504-5c7696c4c28d?w=1600&q=80&auto=format&fit=crop",
   crowd:
     "https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=1600&q=80&auto=format&fit=crop",
   ball: "https://images.unsplash.com/photo-1551958219-acbc608c6377?w=1200&q=80&auto=format&fit=crop",
   trophy:
-    "https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=1200&q=80&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1518091043644-c1d4457512c6?w=1200&q=80&auto=format&fit=crop",
 } as const;
 
 export const REACTIONS = ["⚽️", "🔥", "😱", "😂", "🙌", "💔", "🤯", "👏", "🇦🇷", "🧤"];

@@ -1,4 +1,5 @@
 import type { Venue, Host } from "@/types";
+import { unsplashImg } from "@/lib/imagery";
 import rawStadiums from "./raw/stadiums.json";
 
 interface RawStadium {
@@ -11,14 +12,18 @@ interface RawStadium {
   capacity: number;
 }
 
+// Verified, on-theme stadium/pitch stills for the host-venue cards. A wider set
+// than before so neighbouring cards rarely repeat the same frame.
 const STADIUM_IMAGES = [
-  "https://images.unsplash.com/photo-1540379708242-14a809bef941?w=1200&q=80&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1522778526097-ce0a22ceb253?w=1200&q=80&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1459865264687-595d652de67e?w=1200&q=80&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1577223625816-7546f13df25d?w=1200&q=80&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1551958219-acbc608c6377?w=1200&q=80&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=1200&q=80&auto=format&fit=crop",
-];
+  "1540379708242-14a809bef941", // stadium bowl at golden hour
+  "1489944440615-453fc2b6a9a9", // floodlit, packed stadium at night
+  "1522778526097-ce0a22ceb253", // empty stadium seats, blue hour
+  "1556056504-5c7696c4c28d", // top-down floodlit pitch from the air
+  "1459865264687-595d652de67e", // dewy pitch sideline, close up
+  "1431324155629-1a6deb1dec8d", // a match under the floodlights
+  "1577223625816-7546f13df25d", // the players' tunnel
+  "1574629810360-7efbbe195018", // a ball struck in front of the stands
+].map((id) => unsplashImg(id, 1200));
 
 const COUNTRY: Record<string, Host> = {
   Mexico: "Mexico",

@@ -139,6 +139,8 @@ export default function BettingPage() {
   return (
     <PageShell className="space-y-10 pb-28">
       <PageHeader
+        scene="stadium"
+        seed="markets"
         eyebrow="Friendly stakes · Play-coins"
         title={
           <span className="flex items-center gap-2">

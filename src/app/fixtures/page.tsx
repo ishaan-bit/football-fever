@@ -104,6 +104,7 @@ export default function FixturesPage() {
   return (
     <PageShell size="wide" className="space-y-6">
       <PageHeader
+        scene="stadium"
         eyebrow="World Cup 2026"
         title="Fixtures"
         description="Every kickoff, group table, and knockout tie across the three host nations — all times in IST."

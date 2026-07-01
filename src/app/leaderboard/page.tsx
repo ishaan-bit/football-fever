@@ -66,6 +66,7 @@ export default function LeaderboardPage() {
   return (
     <PageShell className="space-y-6">
       <PageHeader
+        scene="trophy"
         eyebrow="Standings"
         title="Leaderboard"
         description="Where the room settles who actually knows ball. Climb the table, collect badges, and try not to finish below the Oracle."

@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { Gamepad2, ArrowRight, Sparkles, Users, Mic, Flame, Shield, Star } from "lucide-react";
 import { PageShell, PageHeader } from "@/components/shared/page-shell";
 import { Icon } from "@/components/shared/icon";
+import { SceneBackground } from "@/components/shared/scene-background";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,7 +21,23 @@ import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import { useSound } from "@/hooks/use-sound";
 import { MINI_GAMES } from "@/lib/constants";
 import { cn, hslVar } from "@/lib/utils";
+import type { SceneName } from "@/lib/imagery";
 import type { MiniGameId, MiniGameMeta } from "@/types";
+
+/** The photographic mood behind each game's card + play surface. */
+const GAME_SCENE: Record<MiniGameId, SceneName> = {
+  trash_talk: "fire",
+  crowd_meter: "crowd",
+  flash_predictions: "action",
+  guess_next_event: "shot",
+  hot_take_roulette: "fire",
+  penalty_panic: "shot",
+  emoji_battle: "crowd",
+  team_trivia: "stadium",
+  golden_goal: "pitch",
+  var_court: "tunnel",
+  pass_the_curse: "tunnel",
+};
 
 import { CrowdMeter } from "@/components/games/crowd-meter";
 import { FlashPredictions } from "@/components/games/flash-predictions";
@@ -60,6 +77,8 @@ export default function GamesPage() {
   return (
     <PageShell className="space-y-8">
       <PageHeader
+        scene="pitch"
+        seed="games-lounge"
         eyebrow="Lounge"
         title="Party Games"
         description="Jump in between the action. Minimal taps, maximum chaos."
@@ -81,8 +100,9 @@ export default function GamesPage() {
         <Link
           href="/trash-talk"
           onClick={() => play("click")}
-          className="group relative flex flex-col items-start gap-4 overflow-hidden rounded-3xl border border-live/25 bg-live/[0.05] p-6 transition-colors hover:border-live/45 sm:flex-row sm:items-center sm:justify-between"
+          className="group relative isolate flex flex-col items-start gap-4 overflow-hidden rounded-3xl border border-live/25 bg-live/[0.05] p-6 transition-colors hover:border-live/45 sm:flex-row sm:items-center sm:justify-between"
         >
+          <SceneBackground scene="fire" seed="trash-talk" intensity="soft" from="left" grain={false} />
           <div className="absolute -left-10 -top-16 h-44 w-44 rounded-full bg-live/25 blur-3xl transition-opacity group-hover:opacity-80" />
           <div className="absolute -right-12 bottom-0 h-36 w-36 rounded-full bg-magenta/20 blur-3xl" />
           <div className="relative flex items-center gap-4">
@@ -118,8 +138,9 @@ export default function GamesPage() {
         <Link
           href="/games/squad"
           onClick={() => play("click")}
-          className="group relative flex flex-col items-start gap-4 overflow-hidden rounded-3xl border border-electric/25 bg-electric/[0.05] p-6 transition-colors hover:border-electric/45 sm:flex-row sm:items-center sm:justify-between"
+          className="group relative isolate flex flex-col items-start gap-4 overflow-hidden rounded-3xl border border-electric/25 bg-electric/[0.05] p-6 transition-colors hover:border-electric/45 sm:flex-row sm:items-center sm:justify-between"
         >
+          <SceneBackground scene="action" seed="squad-mode" intensity="soft" from="left" grain={false} />
           <div className="absolute -left-10 -top-16 h-44 w-44 rounded-full bg-electric/20 blur-3xl transition-opacity group-hover:opacity-80" />
           <div className="absolute -right-12 bottom-0 h-36 w-36 rounded-full bg-gold/15 blur-3xl" />
           <div className="relative flex items-center gap-4">
@@ -156,7 +177,7 @@ export default function GamesPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.45, delay: reduced ? 0 : i * 0.05, ease: [0.22, 1, 0.36, 1] }}
             >
-              <GameCard meta={g} playable={playable} onOpen={() => open(g)} />
+              <GameCard meta={g} scene={GAME_SCENE[g.id]} playable={playable} onOpen={() => open(g)} />
             </motion.div>
           );
         })}
@@ -176,10 +197,12 @@ export default function GamesPage() {
 
 function GameCard({
   meta,
+  scene,
   playable,
   onOpen,
 }: {
   meta: MiniGameMeta;
+  scene: SceneName;
   playable: boolean;
   onOpen: () => void;
 }) {
@@ -189,8 +212,19 @@ function GameCard({
       onClick={onOpen}
       whileHover={reduced ? undefined : { y: -4 }}
       transition={{ type: "spring", stiffness: 300, damping: 22 }}
-      className="group relative flex h-full w-full flex-col overflow-hidden rounded-3xl border border-white/[0.07] glass p-5 text-left transition-colors hover:border-white/15"
+      className="group relative isolate flex h-full w-full flex-col overflow-hidden rounded-3xl border border-white/[0.07] glass p-5 text-left transition-colors hover:border-white/15"
     >
+      {/* themed photographic wash — brightens on hover. Static (no ken-burns) so a
+          dense grid of cards never runs a dozen zoom loops at once on mobile. */}
+      <SceneBackground
+        scene={scene}
+        seed={meta.id}
+        intensity="subtle"
+        from="top"
+        grain={false}
+        kenBurns={false}
+        className="opacity-70 transition-opacity duration-500 group-hover:opacity-100"
+      />
       {/* accent glow */}
       <div
         className="absolute -right-12 -top-12 h-32 w-32 rounded-full opacity-40 blur-3xl transition-opacity group-hover:opacity-70"
@@ -266,22 +300,30 @@ function DialogBody({ meta }: { meta: MiniGameMeta }) {
 
   return (
     <>
-      <DialogHeader>
-        <div className="flex items-center gap-3">
-          <span
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl"
-            style={{ background: hslVar(meta.accent, 0.14), color: hslVar(meta.accent) }}
-          >
-            <Icon name={meta.icon} className="h-5 w-5" />
-          </span>
-          <div>
-            <DialogTitle>{meta.name}</DialogTitle>
-            <DialogDescription>{meta.tagline}</DialogDescription>
+      {/* Cinematic cover band bleeding to the dialog edges. */}
+      <div className="relative isolate -mx-6 -mt-6 mb-1 h-24 overflow-hidden rounded-t-3xl">
+        <SceneBackground scene={GAME_SCENE[meta.id]} seed={meta.id} intensity="vivid" from="bottom" />
+        <div
+          className="absolute -left-8 top-0 h-28 w-28 rounded-full opacity-50 blur-3xl"
+          style={{ background: hslVar(meta.accent, 0.5) }}
+        />
+        <DialogHeader className="absolute inset-x-4 bottom-3">
+          <div className="flex items-center gap-3">
+            <span
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl backdrop-blur"
+              style={{ background: hslVar(meta.accent, 0.22), color: hslVar(meta.accent) }}
+            >
+              <Icon name={meta.icon} className="h-5 w-5" />
+            </span>
+            <div>
+              <DialogTitle>{meta.name}</DialogTitle>
+              <DialogDescription>{meta.tagline}</DialogDescription>
+            </div>
           </div>
-        </div>
-      </DialogHeader>
+        </DialogHeader>
+      </div>
 
-      <div className="mt-1 max-h-[70vh] overflow-y-auto no-scrollbar">
+      <div className="max-h-[70vh] overflow-y-auto no-scrollbar">
         {render ? render() : <RoomTease meta={meta} />}
       </div>
     </>

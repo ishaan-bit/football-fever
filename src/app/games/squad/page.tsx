@@ -13,6 +13,7 @@ export default function SquadModePage() {
   return (
     <PageShell size="narrow" className="space-y-7">
       <PageHeader
+        scene="action"
         eyebrow="Squad Mode"
         title="Build your five, then play"
         description="Pick any of the 48 nations, draft the players you rate, and put them through the silliest games on the platform."

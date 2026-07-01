@@ -51,6 +51,8 @@ export default function OraclePage() {
   return (
     <PageShell size="wide">
       <PageHeader
+        scene="shot"
+        seed="oracle"
         eyebrow="The Oracle"
         title={<>Predictions, <span className="text-gradient">explained.</span></>}
         description="The smartest fan in the room. Every call comes with the why — not just a number. Beat it for bragging rights."

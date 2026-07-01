@@ -3,10 +3,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Goal, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SmartImage } from "@/components/shared/smart-image";
 import { useSound } from "@/hooks/use-sound";
 import { useHaptics } from "@/hooks/use-haptics";
 import { useConfetti } from "@/hooks/use-confetti";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
+import { sceneImage } from "@/lib/imagery";
 import { cn, hslVar, seededRandom, hashSeed } from "@/lib/utils";
 
 const ACCENT = "var(--magenta)";
@@ -171,6 +173,14 @@ export function PenaltyPanic() {
         }
         transition={{ delay: current && !reduced ? 0.5 : 0, duration: 0.35 }}
       >
+        {/* real goalmouth photo, dimmed, under the net grid for depth */}
+        <SmartImage
+          src={sceneImage("shot", "penalty-panic", 640)}
+          alt=""
+          className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-25"
+          fallbackClassName="absolute inset-0"
+        />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-background/30 to-background/60" />
         {/* net */}
         <div
           className="absolute inset-2 rounded-xl border border-white/15"

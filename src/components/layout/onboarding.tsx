@@ -6,12 +6,18 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TeamCrest } from "@/components/shared/team-crest";
+import { SmartImage } from "@/components/shared/smart-image";
 import { useUserStore } from "@/stores/user";
 import { useHydrated } from "@/hooks/use-hydrated";
-import { ALL_TEAMS } from "@/lib/data";
+import { useReducedMotion } from "@/hooks/use-reduced-motion";
+import { ALL_TEAMS, getTeam } from "@/lib/data";
+import { sceneImage, type SceneName } from "@/lib/imagery";
 import { cn } from "@/lib/utils";
 
 const VIBES = ["Here for the chaos", "Tactical nerd", "Casual & chill", "Ultra. No notes.", "Just here for the memes"];
+
+/** A cinematic still that sets the tone for each step of onboarding. */
+const STEP_SCENE: SceneName[] = ["stadium", "tunnel", "crowd"];
 
 export function Onboarding() {
   const hydrated = useHydrated();
@@ -22,6 +28,7 @@ export function Onboarding() {
   const setVibe = useUserStore((s) => s.setVibe);
   const complete = useUserStore((s) => s.completeOnboarding);
 
+  const reduced = useReducedMotion();
   const [step, setStep] = useState(0);
   const [name, setLocalName] = useState(profile.name === "You" ? "" : profile.name);
   const [team, setTeam] = useState(profile.favoriteTeamId ?? "");
@@ -29,6 +36,8 @@ export function Onboarding() {
   const [q, setQ] = useState("");
 
   if (!hydrated || onboarded) return null;
+
+  const pickedTeam = getTeam(team);
 
   const teams = ALL_TEAMS.filter((t) =>
     t.name.toLowerCase().includes(q.toLowerCase()) || t.code.toLowerCase().includes(q.toLowerCase())
@@ -45,15 +54,50 @@ export function Onboarding() {
     <Dialog open onOpenChange={(o) => !o && finish()}>
       <DialogContent hideClose className="max-w-lg overflow-hidden p-0">
         <DialogTitle className="sr-only">Welcome to Football Fever</DialogTitle>
-        <div className="relative h-28 overflow-hidden">
-          <div className="absolute inset-0 aurora-field" />
-          <div className="absolute inset-0 grid place-items-center">
-            <div className="flex items-center gap-2 text-sm font-medium">
+        <div className="relative h-40 overflow-hidden sm:h-44">
+          {/* Cinematic still that crossfades to match the step. */}
+          <AnimatePresence initial={false} mode="popLayout">
+            <motion.div
+              key={step}
+              className="absolute inset-0"
+              initial={{ opacity: 0, scale: reduced ? 1 : 1.08 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: reduced ? 0 : 0.7, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <SmartImage
+                src={sceneImage(STEP_SCENE[step] ?? "stadium", step, 900)}
+                alt=""
+                className={cn(
+                  "h-full w-full object-cover",
+                  reduced ? "" : "animate-ken-burns"
+                )}
+              />
+            </motion.div>
+          </AnimatePresence>
+          {/* Favourite-team colour wash once a side is chosen. */}
+          {pickedTeam && (
+            <div
+              className="absolute inset-0 mix-blend-soft-light transition-opacity"
+              style={{
+                background: `linear-gradient(135deg, ${pickedTeam.colors.primary}cc, transparent 65%)`,
+              }}
+            />
+          )}
+          <div className="absolute inset-0 aurora-field opacity-60 mix-blend-screen" />
+          <div className="absolute inset-0 bg-gradient-to-b from-background/30 via-background/40 to-popover" />
+          {!reduced && (
+            <div className="pointer-events-none absolute inset-0 animate-light-sweep bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+          )}
+          <div className="grain absolute inset-0" />
+
+          <div className="absolute inset-x-0 top-0 flex items-center justify-center pt-5">
+            <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/25 px-3.5 py-1.5 text-sm font-medium backdrop-blur">
               <Sparkles className="h-4 w-4 text-gold" />
               <span className="text-gradient font-display text-lg font-bold">Football Fever</span>
             </div>
           </div>
-          <div className="absolute bottom-0 left-0 right-0 flex gap-1.5 px-6 pb-3">
+          <div className="absolute inset-x-0 bottom-0 flex gap-1.5 px-6 pb-3">
             {[0, 1, 2].map((i) => (
               <span
                 key={i}
