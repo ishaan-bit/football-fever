@@ -1,6 +1,7 @@
 import type { Team } from "@/types";
 import { TEAMS, getTeam } from "./teams";
 import { seededRandom, hashSeed, clamp } from "@/lib/utils";
+import { REAL_SQUADS, type RealPlayer } from "./real-squads";
 
 /**
  * Deterministic squads for the squad-pick party games.
@@ -150,15 +151,65 @@ function buildSquad(team: Team): Player[] {
   return players;
 }
 
+/** Shirt numbers by position block: keepers 1/12/23, then sequential. */
+const GK_NUMBERS = [1, 12, 23];
+
+/** Build a squad from real, researched players — deterministic per team so the
+ *  same nation always shows the same numbers/stats. Overall = researched rating;
+ *  the five top-trumps sub-stats are spread around it, tilted by position. */
+function buildRealSquad(team: Team, real: RealPlayer[]): Player[] {
+  const order: Record<Position, number> = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
+  const sorted = [...real].sort(
+    (a, b) => order[a.position] - order[b.position] || b.rating - a.rating
+  );
+  let gk = 0;
+  let outfield = 1;
+  const players: Player[] = sorted.map((p, i) => {
+    const rng = seededRandom(hashSeed("rsquad:" + team.id + ":" + p.name));
+    const prof = PROFILE[p.position];
+    const mk = (w: number) => Math.round(clamp(p.rating + (w - 0.6) * 40 + (rng() - 0.5) * 10, 40, 99));
+    const number = p.position === "GK" ? GK_NUMBERS[gk++] ?? 30 + i : ++outfield;
+    return {
+      id: `${team.id}-p${i + 1}`,
+      teamId: team.id,
+      name: p.name,
+      number,
+      position: p.position,
+      overall: clamp(p.rating, 40, 99),
+      stats: {
+        pace: mk(prof.pace),
+        shooting: mk(prof.shooting),
+        passing: mk(prof.passing),
+        defending: mk(prof.defending),
+        flair: mk(prof.flair),
+      },
+      trait: TRAITS[p.position][Math.floor(rng() * TRAITS[p.position].length)]!,
+      star: p.star,
+    };
+  });
+  // Ensure exactly one star (highest overall if none/many flagged) with the #10.
+  if (!players.some((p) => p.star) && players.length) {
+    players.reduce((b, p) => (p.overall > b.overall ? p : b), players[0]!).star = true;
+  }
+  const star = players.find((p) => p.star);
+  if (star && star.number !== 10) {
+    const tenIdx = players.findIndex((p) => p.number === 10);
+    if (tenIdx >= 0) players[tenIdx]!.number = star.number;
+    star.number = 10;
+  }
+  return players;
+}
+
 const CACHE = new Map<string, Player[]>();
 
-/** Stable 23-player squad for a team id. Memoised per id. */
+/** Stable squad for a team id (real players when available, else procedural). */
 export function getSquad(teamId: string): Player[] {
   const cached = CACHE.get(teamId);
   if (cached) return cached;
   const team = getTeam(teamId);
   if (!team) return [];
-  const squad = buildSquad(team);
+  const real = REAL_SQUADS[teamId];
+  const squad = real && real.length >= 11 ? buildRealSquad(team, real) : buildSquad(team);
   CACHE.set(teamId, squad);
   return squad;
 }

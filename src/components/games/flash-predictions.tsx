@@ -4,6 +4,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Zap, Flame, Check, X, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSound } from "@/hooks/use-sound";
+import { useHaptics } from "@/hooks/use-haptics";
+import { useConfetti } from "@/hooks/use-confetti";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import { cn, hslVar, seededRandom, hashSeed } from "@/lib/utils";
 
@@ -39,6 +41,8 @@ interface FlashState {
 
 export function FlashPredictions() {
   const { play } = useSound();
+  const { buzz } = useHaptics();
+  const { celebrate } = useConfetti();
   const reduced = useReducedMotion();
 
   const [attempt, setAttempt] = useState(0); // bumps each new round, seeds determinism
@@ -73,20 +77,28 @@ export function FlashPredictions() {
         setStreak((st) => {
           const next = st + 1;
           setBest((b) => Math.max(b, next));
+          if (next >= 3) {
+            buzz("win");
+            void celebrate();
+          } else {
+            buzz("success");
+          }
           return next;
         });
       } else {
         play("error");
+        buzz("fail");
         setStreak(0);
       }
     },
-    [play]
+    [play, buzz, celebrate]
   );
 
   // round timer
   useEffect(() => {
     if (state.status !== "running") return;
     play("whistle");
+    buzz("tick");
     startRef.current = performance.now();
     setProgress(0);
 
@@ -124,10 +136,13 @@ export function FlashPredictions() {
   const onPick = (i: number) => {
     if (state.status !== "running" || state.picked !== null) return;
     play("pop");
+    buzz("select");
     setState((s) => ({ ...s, picked: i }));
   };
 
   const next = () => {
+    play("swoosh");
+    buzz("tap");
     const a = attempt + 1;
     setAttempt(a);
     setRound((r) => r + 1);
@@ -136,6 +151,7 @@ export function FlashPredictions() {
 
   const restart = () => {
     play("click");
+    buzz("tap");
     setScore(0);
     setStreak(0);
     setBest(0);
@@ -161,9 +177,9 @@ export function FlashPredictions() {
 
       {/* scoreboard */}
       <div className="grid grid-cols-3 gap-2.5">
-        <Stat label="Round" value={`${round + 1}`} accent="var(--electric)" />
-        <Stat label="Score" value={score.toLocaleString()} accent={ACCENT} />
-        <Stat label="Streak" value={`${streak}🔥`} accent="var(--live)" />
+        <Stat label="Round" value={`${round + 1}`} accent="var(--electric)" reduced={reduced} />
+        <Stat label="Score" value={score.toLocaleString()} accent={ACCENT} reduced={reduced} />
+        <Stat label="Streak" value={`${streak}🔥`} accent="var(--live)" reduced={reduced} />
       </div>
 
       {/* ring + question */}
@@ -184,9 +200,19 @@ export function FlashPredictions() {
               transition={{ duration: reduced ? 0 : 0.12, ease: "linear" }}
             />
           </svg>
-          <span className="font-display text-2xl font-bold tabular-nums" style={{ color: hslVar(ringColor) }}>
-            {state.status === "revealed" ? "—" : secondsLeft}
-          </span>
+          <AnimatePresence mode="popLayout" initial={false}>
+            <motion.span
+              key={state.status === "revealed" ? "done" : secondsLeft}
+              className="font-display text-2xl font-bold tabular-nums"
+              style={{ color: hslVar(ringColor) }}
+              initial={reduced ? { opacity: 0 } : { opacity: 0, scale: 1.6 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={reduced ? { opacity: 0 } : { opacity: 0, scale: 0.5 }}
+              transition={{ type: "spring", stiffness: 480, damping: 24 }}
+            >
+              {state.status === "revealed" ? "—" : secondsLeft}
+            </motion.span>
+          </AnimatePresence>
         </div>
 
         <AnimatePresence mode="wait">
@@ -215,7 +241,17 @@ export function FlashPredictions() {
               key={opt}
               onClick={() => onPick(i)}
               disabled={revealed || state.picked !== null}
-              whileTap={reduced ? undefined : { scale: 0.98 }}
+              whileTap={reduced ? undefined : { scale: 0.92 }}
+              animate={
+                reduced
+                  ? undefined
+                  : correctPick
+                    ? { scale: [1, 1.05, 1] }
+                    : wrongPick
+                      ? { x: [0, -6, 6, -4, 4, 0] }
+                      : { scale: 1, x: 0 }
+              }
+              transition={{ duration: 0.4 }}
               className={cn(
                 "flex items-center justify-between rounded-2xl border px-4 py-3.5 text-left text-sm font-semibold transition-colors disabled:cursor-default",
                 "border-white/[0.08] bg-white/[0.03]",
@@ -236,7 +272,13 @@ export function FlashPredictions() {
 
       {/* footer */}
       {state.status === "revealed" ? (
-        <div className="flex items-center justify-between gap-3">
+        <motion.div
+          key="result"
+          initial={reduced ? { opacity: 0 } : { opacity: 0, y: 10, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ type: "spring", stiffness: 420, damping: 28 }}
+          className="flex items-center justify-between gap-3"
+        >
           <span className="flex items-center gap-1.5 text-sm font-semibold">
             {state.picked === state.answer ? (
               <span className="text-pitch">Nailed it.</span>
@@ -254,7 +296,7 @@ export function FlashPredictions() {
               <Zap className="h-4 w-4" /> Next round
             </Button>
           </div>
-        </div>
+        </motion.div>
       ) : (
         <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
           <Flame className="h-3.5 w-3.5 text-gold" /> Best streak this run: <b className="text-foreground">{best}</b>
@@ -264,12 +306,23 @@ export function FlashPredictions() {
   );
 }
 
-function Stat({ label, value, accent }: { label: string; value: string; accent: string }) {
+function Stat({ label, value, accent, reduced }: { label: string; value: string; accent: string; reduced?: boolean }) {
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3 text-center">
       <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="mt-0.5 font-display text-lg font-bold tabular-nums" style={{ color: hslVar(accent) }}>
-        {value}
+        <AnimatePresence mode="popLayout" initial={false}>
+          <motion.span
+            key={value}
+            className="inline-block"
+            initial={reduced ? { opacity: 0 } : { opacity: 0, scale: 1.4, y: -4 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={reduced ? { opacity: 0 } : { opacity: 0, scale: 0.6, y: 4 }}
+            transition={{ type: "spring", stiffness: 520, damping: 26 }}
+          >
+            {value}
+          </motion.span>
+        </AnimatePresence>
       </p>
     </div>
   );

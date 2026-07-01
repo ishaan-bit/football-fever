@@ -81,9 +81,13 @@ export function PredictPanel({ match }: { match: Match }) {
           const opts = def.options(match);
           const chosen = valueFor(def.market);
           const settled = mine.find((p) => p.market === def.market && p.settled);
+          const knockout = match.stage !== "group";
           const oraclePick = def.market === "winner" && oracle
-            ? oracle.homeWinProb > oracle.awayWinProb && oracle.homeWinProb > oracle.drawProb ? "home"
-              : oracle.awayWinProb > oracle.drawProb ? "away" : "draw"
+            ? knockout
+              // 2-way: split the draw evenly, pick the side more likely to go through.
+              ? oracle.homeWinProb >= oracle.awayWinProb ? "home" : "away"
+              : oracle.homeWinProb > oracle.awayWinProb && oracle.homeWinProb > oracle.drawProb ? "home"
+                : oracle.awayWinProb > oracle.drawProb ? "away" : "draw"
             : undefined;
           return (
             <div key={def.market} className="rounded-2xl border border-white/[0.06] p-3">

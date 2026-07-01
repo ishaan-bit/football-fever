@@ -40,22 +40,33 @@ export interface MarketDef {
   options: (match: Match) => Array<{ value: string; label: string }>;
 }
 
+/** Group games can end level; from the Round of 32 on it's win-or-go-home. */
+export const isKnockout = (match: Pick<Match, "stage">): boolean => match.stage !== "group";
+
 export function marketDefs(match: Match): MarketDef[] {
   const home = getTeam(match.homeTeamId);
   const away = getTeam(match.awayTeamId);
   const hn = home?.name ?? "Home";
   const an = away?.name ?? "Away";
+  const knockout = isKnockout(match);
   const defs: MarketDef[] = [
     {
       market: "winner",
-      label: "Match Winner",
-      hint: "Who takes it?",
+      label: knockout ? "To Advance" : "Match Winner",
+      hint: knockout ? "Who goes through?" : "Who takes it?",
       icon: "Trophy",
-      options: () => [
-        { value: "home", label: hn },
-        { value: "draw", label: "Draw" },
-        { value: "away", label: an },
-      ],
+      // No "Draw" in the knockouts — a tie is settled by extra time / penalties.
+      options: () =>
+        knockout
+          ? [
+              { value: "home", label: hn },
+              { value: "away", label: an },
+            ]
+          : [
+              { value: "home", label: hn },
+              { value: "draw", label: "Draw" },
+              { value: "away", label: an },
+            ],
     },
     {
       market: "scoreline",
@@ -145,10 +156,19 @@ export function scorePrediction(
 
   let correct = false;
   switch (prediction.market) {
-    case "winner":
-      correct =
-        prediction.value === (h > a ? "home" : h < a ? "away" : "draw");
+    case "winner": {
+      // In the knockouts a level score is decided on penalties — never a draw.
+      const outcome =
+        h > a
+          ? "home"
+          : h < a
+            ? "away"
+            : isKnockout(match)
+              ? (match.homePenalties ?? 0) >= (match.awayPenalties ?? 0) ? "home" : "away"
+              : "draw";
+      correct = prediction.value === outcome;
       break;
+    }
     case "scoreline":
       correct = prediction.value === `${h}-${a}`;
       break;

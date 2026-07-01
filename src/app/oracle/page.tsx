@@ -185,7 +185,7 @@ export default function OraclePage() {
                     </div>
                     {oracle.upset.active ? <Badge variant="live" className="text-[10px]"><Zap className="h-2.5 w-2.5" /> Upset</Badge> : <span className="text-[11px] text-muted-foreground">{oracle.confidence}/100</span>}
                   </div>
-                  <ProbabilityBar home={oracle.homeWinProb} draw={oracle.drawProb} away={oracle.awayWinProb} homeLabel={h?.code} awayLabel={a?.code} />
+                  <ProbabilityBar home={oracle.homeWinProb} draw={oracle.drawProb} away={oracle.awayWinProb} homeLabel={h?.code} awayLabel={a?.code} knockout={match.stage !== "group"} />
                   <p className="mt-2.5 text-sm font-medium text-gradient-pitch">{oracle.verdict}</p>
                 </Link>
               </motion.div>

@@ -9,12 +9,34 @@ interface ProbabilityBarProps {
   awayLabel?: string;
   className?: string;
   showLabels?: boolean;
+  /** Knockout tie: fold the draw into each side and show a 2-way "to advance". */
+  knockout?: boolean;
 }
 
-/** The broadcast-style 3-way win probability bar. */
+/** The broadcast-style win probability bar (3-way, or 2-way "to advance" for knockouts). */
 export function ProbabilityBar({
-  home, draw, away, homeLabel, awayLabel, className, showLabels = true,
+  home, draw, away, homeLabel, awayLabel, className, showLabels = true, knockout = false,
 }: ProbabilityBarProps) {
+  if (knockout) {
+    const total = home + draw + away || 1;
+    const homeAdv = (home + draw / 2) / total;
+    const awayAdv = (away + draw / 2) / total;
+    return (
+      <div className={cn("space-y-1.5", className)}>
+        {showLabels && (
+          <div className="flex items-center justify-between text-[11px] font-semibold">
+            <span className="text-electric">{homeLabel ?? "Home"} {pct(homeAdv)}</span>
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">to advance</span>
+            <span className="text-accent">{awayLabel ?? "Away"} {pct(awayAdv)}</span>
+          </div>
+        )}
+        <div className="flex h-2.5 gap-0.5 overflow-hidden rounded-full">
+          <div className="h-full rounded-l-full bg-gradient-to-r from-electric to-electric/70 transition-all duration-700" style={{ width: pct(homeAdv) }} />
+          <div className="h-full rounded-r-full bg-gradient-to-r from-accent/70 to-accent transition-all duration-700" style={{ width: pct(awayAdv) }} />
+        </div>
+      </div>
+    );
+  }
   return (
     <div className={cn("space-y-1.5", className)}>
       {showLabels && (

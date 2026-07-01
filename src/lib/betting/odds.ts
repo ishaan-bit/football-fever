@@ -66,31 +66,51 @@ export function makeOdds(
   const homeFirst = (1 - noGoal) * (xgH / (xgH + xgA));
   const awayFirst = (1 - noGoal) * (xgA / (xgH + xgA));
 
+  const knockout = match.stage !== "group";
+
   const markets: Market[] = [
-    {
-      key: "match_result",
-      label: "Match Result",
-      selections: price(
-        [
-          { id: "home", label: home.name, trueProb: prediction.homeWinProb },
-          { id: "draw", label: "Draw", trueProb: prediction.drawProb },
-          { id: "away", label: away.name, trueProb: prediction.awayWinProb },
-        ],
-        margin
-      ),
-    },
-    {
-      key: "double_chance",
-      label: "Double Chance",
-      selections: price(
-        [
-          { id: "1x", label: `${home.code} or Draw`, trueProb: prediction.homeWinProb + prediction.drawProb },
-          { id: "12", label: "Either team", trueProb: prediction.homeWinProb + prediction.awayWinProb },
-          { id: "x2", label: `Draw or ${away.code}`, trueProb: prediction.drawProb + prediction.awayWinProb },
-        ],
-        margin
-      ),
-    },
+    // Knockouts can't end in a draw over the tie, so price a 2-way "to advance"
+    // (the draw probability is split toward each side) instead of a 1X2.
+    knockout
+      ? {
+          key: "match_result",
+          label: "To Advance",
+          selections: price(
+            [
+              { id: "home", label: home.name, trueProb: prediction.homeWinProb + prediction.drawProb * 0.5 },
+              { id: "away", label: away.name, trueProb: prediction.awayWinProb + prediction.drawProb * 0.5 },
+            ],
+            margin
+          ),
+        }
+      : {
+          key: "match_result",
+          label: "Match Result",
+          selections: price(
+            [
+              { id: "home", label: home.name, trueProb: prediction.homeWinProb },
+              { id: "draw", label: "Draw", trueProb: prediction.drawProb },
+              { id: "away", label: away.name, trueProb: prediction.awayWinProb },
+            ],
+            margin
+          ),
+        },
+    ...(knockout
+      ? []
+      : [
+          {
+            key: "double_chance" as const,
+            label: "Double Chance",
+            selections: price(
+              [
+                { id: "1x", label: `${home.code} or Draw`, trueProb: prediction.homeWinProb + prediction.drawProb },
+                { id: "12", label: "Either team", trueProb: prediction.homeWinProb + prediction.awayWinProb },
+                { id: "x2", label: `Draw or ${away.code}`, trueProb: prediction.drawProb + prediction.awayWinProb },
+              ],
+              margin
+            ),
+          },
+        ]),
     {
       key: "over_under_2_5",
       label: "Total Goals 2.5",
@@ -138,20 +158,6 @@ export function makeOdds(
       ),
     },
   ];
-
-  if (match.stage !== "group") {
-    markets.push({
-      key: "to_qualify",
-      label: "To Advance",
-      selections: price(
-        [
-          { id: "home", label: home.name, trueProb: prediction.homeWinProb + prediction.drawProb * 0.5 },
-          { id: "away", label: away.name, trueProb: prediction.awayWinProb + prediction.drawProb * 0.5 },
-        ],
-        margin - 0.02
-      ),
-    });
-  }
 
   // Find the single best value selection across every market.
   let best: MatchOdds["bestValue"] = null;

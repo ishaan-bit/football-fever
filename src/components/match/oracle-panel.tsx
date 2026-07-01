@@ -87,6 +87,7 @@ export function OraclePanel({ match }: { match: Match }) {
           className="mt-4"
           home={oracle.homeWinProb} draw={oracle.drawProb} away={oracle.awayWinProb}
           homeLabel={home.code} awayLabel={away.code}
+          knockout={match.stage !== "group"}
         />
       </div>
 

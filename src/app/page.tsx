@@ -170,7 +170,7 @@ function Hero({ match, now }: { match: import("@/types").Match; now: number }) {
             {APP.description}
           </p>
 
-          <div className="mt-7 grid gap-4 lg:grid-cols-[1.2fr_1fr]">
+          <div className="mt-7 grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
             {/* Featured match card */}
             <Link
               href={`/match/${match.id}`}
@@ -292,6 +292,7 @@ function OracleHighlight({ match, className }: { match?: import("@/types").Match
           away={oracle.awayWinProb}
           homeLabel={home.code}
           awayLabel={away.code}
+          knockout={match?.stage !== "group"}
         />
         <p className="mt-4 text-sm leading-relaxed text-foreground/80">
           “{oracle.preview.split(". ").slice(0, 2).join(". ")}.”

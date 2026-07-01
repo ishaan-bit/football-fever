@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Gauge, Crosshair, Brain, Shield, Wand2, RotateCcw, Trophy, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSound } from "@/hooks/use-sound";
+import { useHaptics } from "@/hooks/use-haptics";
 import { useConfetti } from "@/hooks/use-confetti";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import { getSquad, squadTeams, type Player, type PlayerStats } from "@/lib/data/squads";
@@ -22,6 +23,7 @@ const STATS: Array<{ key: keyof PlayerStats; label: string; icon: React.Componen
 
 export function TopTrumps({ cast, teamId }: { cast: Player[]; teamId: string }) {
   const { play } = useSound();
+  const { buzz } = useHaptics();
   const { celebrate } = useConfetti();
   const reduced = useReducedMotion();
 
@@ -50,28 +52,41 @@ export function TopTrumps({ cast, teamId }: { cast: Player[]; teamId: string }) 
 
   const choose = (key: keyof PlayerStats) => {
     if (chosen || !mine || !theirs) return;
+    buzz("select");
     setChosen(key);
     const a = mine.stats[key];
     const b = theirs.stats[key];
     if (a >= b) {
       setYou((v) => v + 1);
-      play("win");
+      buzz("success");
+      play("goal");
     } else {
       setOpp((v) => v + 1);
+      buzz("fail");
       play("error");
     }
   };
 
   const advance = () => {
+    buzz("tap");
     play("click");
     const next = step + 1;
     setChosen(null);
     setStep(next);
-    if (next >= rounds && you > opp) celebrate(["#9b6bff", "#22e0a1", "#19c3ff"]);
+    if (next >= rounds) {
+      if (you > opp) {
+        buzz("win");
+        play("win");
+        celebrate(["#9b6bff", "#22e0a1", "#19c3ff"]);
+      } else {
+        play("whistle");
+      }
+    }
   };
 
   const restart = () => {
-    play("click");
+    buzz("tap");
+    play("whistle");
     setStep(0);
     setYou(0);
     setOpp(0);
@@ -83,10 +98,20 @@ export function TopTrumps({ cast, teamId }: { cast: Player[]; teamId: string }) 
     const draw = you === opp;
     const color = win ? "var(--pitch)" : draw ? "var(--gold)" : "var(--live)";
     return (
-      <div className="flex flex-col items-center gap-4 py-2 text-center">
+      <motion.div
+        initial={{ opacity: 0, y: reduced ? 0 : 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex flex-col items-center gap-4 py-2 text-center"
+      >
         <motion.div
           initial={{ scale: reduced ? 1 : 0.4, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
+          animate={
+            reduced
+              ? { scale: 1, opacity: 1 }
+              : win
+                ? { scale: [0.4, 1.12, 1], opacity: 1, rotate: [0, -6, 6, 0] }
+                : { scale: 1, opacity: 1 }
+          }
           transition={{ type: "spring", stiffness: 200, damping: 14 }}
           className="grid h-24 w-24 place-items-center rounded-full border"
           style={{ borderColor: hslVar(color, 0.5), background: hslVar(color, 0.12) }}
@@ -94,15 +119,25 @@ export function TopTrumps({ cast, teamId }: { cast: Player[]; teamId: string }) 
           <Trophy className="h-9 w-9" style={{ color: hslVar(color) }} />
         </motion.div>
         <div>
-          <p className="font-display text-2xl font-bold tabular-nums">{you} – {opp}</p>
+          <motion.p
+            key={`${you}-${opp}`}
+            initial={reduced ? false : { scale: 1.3, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 300, damping: 16, delay: 0.1 }}
+            className="font-display text-2xl font-bold tabular-nums"
+          >
+            {you} – {opp}
+          </motion.p>
           <p className="text-sm text-muted-foreground">
             {win ? "You schooled the Oracle." : draw ? "Honours even with the Oracle." : "The Oracle had your number."}
           </p>
         </div>
-        <Button className="w-full" variant="default" onClick={restart}>
-          <RotateCcw className="h-4 w-4" /> Rematch
-        </Button>
-      </div>
+        <motion.div className="w-full" whileTap={reduced ? undefined : { scale: 0.97 }}>
+          <Button className="w-full" variant="default" onClick={restart}>
+            <RotateCcw className="h-4 w-4" /> Rematch
+          </Button>
+        </motion.div>
+      </motion.div>
     );
   }
 
@@ -113,9 +148,31 @@ export function TopTrumps({ cast, teamId }: { cast: Player[]; teamId: string }) 
       </p>
 
       <div className="flex items-center justify-between text-sm font-semibold">
-        <span className="text-electric">You {you}</span>
+        <span className="text-electric">
+          You{" "}
+          <motion.span
+            key={you}
+            initial={reduced ? false : { scale: 1.6, opacity: 0.4 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 400, damping: 15 }}
+            className="inline-block tabular-nums"
+          >
+            {you}
+          </motion.span>
+        </span>
         <span className="text-xs text-muted-foreground">Round {step + 1} / {rounds}</span>
-        <span className="text-accent">Oracle {opp}</span>
+        <span className="text-accent">
+          Oracle{" "}
+          <motion.span
+            key={opp}
+            initial={reduced ? false : { scale: 1.6, opacity: 0.4 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 400, damping: 15 }}
+            className="inline-block tabular-nums"
+          >
+            {opp}
+          </motion.span>
+        </span>
       </div>
 
       <AnimatePresence mode="wait">
@@ -144,7 +201,15 @@ export function TopTrumps({ cast, teamId }: { cast: Player[]; teamId: string }) 
                   key={key}
                   onClick={() => choose(key)}
                   disabled={!!chosen}
-                  whileTap={reduced ? undefined : { scale: 0.99 }}
+                  whileTap={reduced ? undefined : { scale: 0.92 }}
+                  animate={
+                    reduced || !picked
+                      ? undefined
+                      : won
+                        ? { scale: [1, 1.04, 1] }
+                        : { x: [0, -5, 5, -3, 3, 0] }
+                  }
+                  transition={{ duration: 0.4 }}
                   className={cn(
                     "flex items-center justify-between rounded-xl border px-3.5 py-2.5 text-sm font-semibold transition-colors disabled:cursor-default",
                     "border-white/[0.08] bg-white/[0.03]",
@@ -172,7 +237,11 @@ export function TopTrumps({ cast, teamId }: { cast: Player[]; teamId: string }) 
       </AnimatePresence>
 
       {chosen && (
-        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
+        <motion.div
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          whileTap={reduced ? undefined : { scale: 0.97 }}
+        >
           <Button size="sm" className="w-full" variant="default" onClick={advance}>
             {step + 1 >= rounds ? <><Trophy className="h-4 w-4" /> See result</> : "Next round"}
           </Button>
@@ -183,10 +252,14 @@ export function TopTrumps({ cast, teamId }: { cast: Player[]; teamId: string }) 
 }
 
 function PlayerCard({ player, side, reveal = true }: { player?: Player; side: "you" | "opp"; reveal?: boolean }) {
+  const reduced = useReducedMotion();
   if (!player) return null;
   const accent = side === "you" ? "var(--electric)" : ACCENT;
   return (
-    <div
+    <motion.div
+      initial={reduced ? false : { opacity: 0, scale: 0.94, y: 8 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      transition={{ type: "spring", stiffness: 300, damping: 20 }}
       className="rounded-2xl border p-3"
       style={{ borderColor: hslVar(accent, 0.3), background: hslVar(accent, 0.07) }}
     >
@@ -199,10 +272,21 @@ function PlayerCard({ player, side, reveal = true }: { player?: Player; side: "y
         </span>
       </div>
       <p className="mt-1.5 flex items-center gap-1 text-sm font-bold leading-tight">
-        <span className="truncate">{reveal ? player.name : "•••••"}</span>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.span
+            key={reveal ? "name" : "masked"}
+            initial={reduced ? false : { opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={reduced ? undefined : { opacity: 0, scale: 0.9 }}
+            transition={{ type: "spring", stiffness: 400, damping: 22 }}
+            className="truncate"
+          >
+            {reveal ? player.name : "•••••"}
+          </motion.span>
+        </AnimatePresence>
         {reveal && player.star && <Star className="h-3 w-3 shrink-0 fill-gold text-gold" />}
       </p>
       <p className="text-[11px] text-muted-foreground">{player.position} · {player.overall} OVR</p>
-    </div>
+    </motion.div>
   );
 }

@@ -4,6 +4,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Flame, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSound } from "@/hooks/use-sound";
+import { useHaptics } from "@/hooks/use-haptics";
+import { useConfetti } from "@/hooks/use-confetti";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import { cn, hslVar, seededRandom, hashSeed } from "@/lib/utils";
 
@@ -32,6 +34,8 @@ type Vote = "based" | "banned" | null;
 
 export function HotTakeRoulette() {
   const { play } = useSound();
+  const { buzz } = useHaptics();
+  const { celebrate } = useConfetti();
   const reduced = useReducedMotion();
 
   const [rotation, setRotation] = useState(0);
@@ -63,6 +67,7 @@ export function HotTakeRoulette() {
   const spin = () => {
     if (spinning) return;
     play("swoosh");
+    buzz("impact");
     setVote(null);
     setSpinning(true);
     const a = spinRef.current + 1;
@@ -82,6 +87,7 @@ export function HotTakeRoulette() {
       setLanded(target);
       setSpinning(false);
       play("pop");
+      buzz("heavy");
     };
     if (reduced) settle();
     else window.setTimeout(settle, 2300);
@@ -90,7 +96,14 @@ export function HotTakeRoulette() {
   const castVote = (v: "based" | "banned") => {
     if (vote || landed === null) return;
     setVote(v);
-    play(v === "based" ? "win" : "error");
+    if (v === "based") {
+      play("win");
+      buzz("win");
+      celebrate(["#22e0a1", "#19c3ff", "#ffce3a"]);
+    } else {
+      play("error");
+      buzz("fail");
+    }
   };
 
   const conic = useMemo(
@@ -132,9 +145,10 @@ export function HotTakeRoulette() {
           {landed !== null && !spinning ? (
             <motion.div
               key={landed}
-              initial={{ opacity: 0, scale: reduced ? 1 : 0.94 }}
-              animate={{ opacity: 1, scale: 1 }}
+              initial={{ opacity: 0, scale: reduced ? 1 : 0.9, y: reduced ? 0 : 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0 }}
+              transition={reduced ? { duration: 0 } : { type: "spring", stiffness: 380, damping: 22 }}
             >
               <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-live">The take</p>
               <p className="mt-1 font-display text-lg font-bold leading-snug">“{TAKES[landed]}”</p>
@@ -148,50 +162,82 @@ export function HotTakeRoulette() {
       </div>
 
       {/* votes */}
-      {landed !== null && !spinning && (
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-2.5">
-            <button
-              onClick={() => castVote("based")}
-              disabled={!!vote}
-              className={cn(
-                "rounded-2xl border px-4 py-3 text-sm font-bold transition-colors",
-                vote === "based" ? "border-pitch/60 bg-pitch/15 text-pitch" : "border-white/[0.08] bg-white/[0.03] hover:bg-pitch/10 disabled:opacity-60"
-              )}
-            >
-              Based 🔥
-            </button>
-            <button
-              onClick={() => castVote("banned")}
-              disabled={!!vote}
-              className={cn(
-                "rounded-2xl border px-4 py-3 text-sm font-bold transition-colors",
-                vote === "banned" ? "border-live/60 bg-live/15 text-live" : "border-white/[0.08] bg-white/[0.03] hover:bg-live/10 disabled:opacity-60"
-              )}
-            >
-              Banned 🚫
-            </button>
-          </div>
-
-          {vote && (
-            <div>
-              <div className="flex h-3 w-full overflow-hidden rounded-full bg-white/[0.06]">
-                <motion.div
-                  className="bg-pitch"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${basedPct}%` }}
-                  transition={{ duration: reduced ? 0 : 0.5, ease: "easeOut" }}
-                />
-                <div className="flex-1 bg-live" />
-              </div>
-              <div className="mt-1.5 flex justify-between text-[11px] font-semibold">
-                <span className="text-pitch">{basedPct}% based · {tally.based}</span>
-                <span className="text-live">{tally.banned} · banned {100 - basedPct}%</span>
-              </div>
+      <AnimatePresence>
+        {landed !== null && !spinning && (
+          <motion.div
+            className="space-y-3"
+            initial={reduced ? false : { opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={reduced ? { opacity: 0 } : { opacity: 0, y: 6 }}
+            transition={reduced ? { duration: 0 } : { type: "spring", stiffness: 320, damping: 26 }}
+          >
+            <div className="grid grid-cols-2 gap-2.5">
+              <motion.button
+                onClick={() => castVote("based")}
+                disabled={!!vote}
+                whileTap={{ scale: 0.92 }}
+                animate={vote === "based" ? (reduced ? {} : { scale: [1, 1.06, 1] }) : {}}
+                transition={{ duration: 0.35, ease: "easeOut" }}
+                className={cn(
+                  "rounded-2xl border px-4 py-3 text-sm font-bold transition-colors",
+                  vote === "based" ? "border-pitch/60 bg-pitch/15 text-pitch" : "border-white/[0.08] bg-white/[0.03] hover:bg-pitch/10 disabled:opacity-60"
+                )}
+              >
+                Based 🔥
+              </motion.button>
+              <motion.button
+                onClick={() => castVote("banned")}
+                disabled={!!vote}
+                whileTap={{ scale: 0.92 }}
+                animate={vote === "banned" ? (reduced ? {} : { x: [0, -6, 6, -4, 4, 0] }) : {}}
+                transition={{ duration: 0.4, ease: "easeOut" }}
+                className={cn(
+                  "rounded-2xl border px-4 py-3 text-sm font-bold transition-colors",
+                  vote === "banned" ? "border-live/60 bg-live/15 text-live" : "border-white/[0.08] bg-white/[0.03] hover:bg-live/10 disabled:opacity-60"
+                )}
+              >
+                Banned 🚫
+              </motion.button>
             </div>
-          )}
-        </div>
-      )}
+
+            <AnimatePresence>
+              {vote && (
+                <motion.div
+                  initial={reduced ? false : { opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={reduced ? { duration: 0 } : { type: "spring", stiffness: 340, damping: 26 }}
+                >
+                  <div className="flex h-3 w-full overflow-hidden rounded-full bg-white/[0.06]">
+                    <motion.div
+                      className="bg-pitch"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${basedPct}%` }}
+                      transition={{ duration: reduced ? 0 : 0.5, ease: "easeOut" }}
+                    />
+                    <div className="flex-1 bg-live" />
+                  </div>
+                  <div className="mt-1.5 flex justify-between text-[11px] font-semibold">
+                    <span className="text-pitch">
+                      <motion.span
+                        key={basedPct}
+                        initial={reduced ? false : { scale: 1.4, opacity: 0.6 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ type: "spring", stiffness: 500, damping: 18 }}
+                        className="inline-block"
+                      >
+                        {basedPct}%
+                      </motion.span>{" "}
+                      based · {tally.based}
+                    </span>
+                    <span className="text-live">{tally.banned} · banned {100 - basedPct}%</span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="flex items-center justify-between">
         <span className="text-[11px] text-muted-foreground">Spins: <b className="text-foreground">{spins}</b></span>

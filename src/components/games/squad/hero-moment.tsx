@@ -5,6 +5,7 @@ import { Flame, RotateCcw, Trophy, Star, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useSound } from "@/hooks/use-sound";
+import { useHaptics } from "@/hooks/use-haptics";
 import { useConfetti } from "@/hooks/use-confetti";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import { cn, hslVar } from "@/lib/utils";
@@ -55,6 +56,7 @@ function rollHero(cast: Player[], stat: keyof PlayerStats): Player {
 
 export function HeroMoment({ cast }: { cast: Player[] }) {
   const { play } = useSound();
+  const { buzz } = useHaptics();
   const { celebrate } = useConfetti();
   const reduced = useReducedMotion();
 
@@ -76,6 +78,8 @@ export function HeroMoment({ cast }: { cast: Player[] }) {
   const choose = (p: Player) => {
     if (revealed) return;
     setPick(p.id);
+    buzz("select");
+    play("pop");
     const winner = rollHero(cast, moment.stat);
     setHero(winner);
     if (winner.id === p.id) {
@@ -83,9 +87,11 @@ export function HeroMoment({ cast }: { cast: Player[] }) {
       setScore((s) => s + Math.round(150 * mult));
       setStreak((st) => st + 1);
       setHits((h) => h + 1);
+      buzz("success");
       play("goal");
     } else {
       setStreak(0);
+      buzz("fail");
       play("error");
     }
   };
@@ -96,11 +102,18 @@ export function HeroMoment({ cast }: { cast: Player[] }) {
     setPick(null);
     setHero(null);
     setStep(next);
-    if (next >= ROUNDS && hits >= 3) celebrate(["#ffce3a", "#22e0a1", "#19c3ff"]);
+    if (next >= ROUNDS && hits >= 3) {
+      buzz("win");
+      play("win");
+      celebrate(["#ffce3a", "#22e0a1", "#19c3ff"]);
+    } else {
+      buzz("tap");
+    }
   };
 
   const restart = () => {
-    play("click");
+    play("whistle");
+    buzz("tap");
     setRun((r) => r + 1);
     setStep(0);
     setScore(0);
@@ -130,13 +143,24 @@ export function HeroMoment({ cast }: { cast: Player[] }) {
             {grade.letter}
           </span>
         </motion.div>
-        <div>
+        <motion.div
+          initial={{ opacity: 0, y: reduced ? 0 : 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: reduced ? 0 : 0.18, type: "spring", stiffness: 300, damping: 20 }}
+        >
           <p className="font-display text-2xl font-bold tabular-nums">{score.toLocaleString()} pts</p>
           <p className="text-sm text-muted-foreground">{hits}/{ROUNDS} heroes called · {grade.label}</p>
-        </div>
-        <Button className="w-full" variant="gold" onClick={restart}>
-          <RotateCcw className="h-4 w-4" /> Run it back
-        </Button>
+        </motion.div>
+        <motion.div
+          className="w-full"
+          initial={{ opacity: 0, y: reduced ? 0 : 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: reduced ? 0 : 0.3, type: "spring", stiffness: 300, damping: 22 }}
+        >
+          <Button className="w-full" variant="gold" onClick={restart}>
+            <RotateCcw className="h-4 w-4" /> Run it back
+          </Button>
+        </motion.div>
       </div>
     );
   }
@@ -151,10 +175,26 @@ export function HeroMoment({ cast }: { cast: Player[] }) {
         <div className="flex items-center justify-between text-xs">
           <span className="font-semibold">Moment {step + 1} / {ROUNDS}</span>
           <span className="flex items-center gap-3">
-            <span className="flex items-center gap-1 text-live">
+            <motion.span
+              key={streak}
+              initial={reduced ? false : { scale: 1.35 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 500, damping: 16 }}
+              className="flex items-center gap-1 text-live"
+            >
               <Flame className="h-3.5 w-3.5" /> {streak}×
-            </span>
-            <span className="font-display font-bold tabular-nums text-gold">{score}</span>
+            </motion.span>
+            <AnimatePresence mode="popLayout" initial={false}>
+              <motion.span
+                key={score}
+                initial={reduced ? false : { scale: 1.4, color: hslVar("var(--pitch)") }}
+                animate={{ scale: 1, color: hslVar("var(--gold)") }}
+                transition={{ type: "spring", stiffness: 480, damping: 18 }}
+                className="font-display font-bold tabular-nums text-gold"
+              >
+                {score}
+              </motion.span>
+            </AnimatePresence>
           </span>
         </div>
         <Progress value={(step / ROUNDS) * 100} indicatorClassName="bg-gold" />
@@ -188,7 +228,17 @@ export function HeroMoment({ cast }: { cast: Player[] }) {
                   key={p.id}
                   onClick={() => choose(p)}
                   disabled={revealed}
-                  whileTap={reduced ? undefined : { scale: 0.98 }}
+                  whileTap={reduced ? undefined : { scale: 0.96 }}
+                  animate={
+                    reduced || !revealed
+                      ? undefined
+                      : isHero
+                        ? { scale: [1, 1.05, 1] }
+                        : isPick
+                          ? { x: [0, -6, 6, -4, 4, 0] }
+                          : undefined
+                  }
+                  transition={{ duration: 0.4 }}
                   className={cn(
                     "flex items-center gap-3 rounded-2xl border px-3.5 py-3 text-left transition-colors disabled:cursor-default",
                     "border-white/[0.08] bg-white/[0.03]",
@@ -216,7 +266,12 @@ export function HeroMoment({ cast }: { cast: Player[] }) {
       </AnimatePresence>
 
       {revealed && hero && (
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
+        <motion.div
+          initial={{ opacity: 0, y: reduced ? 0 : 8, scale: reduced ? 1 : 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ type: "spring", stiffness: 320, damping: 20 }}
+          className="space-y-3"
+        >
           <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-3 text-sm">
             <p className="font-semibold">
               {pick === hero.id ? <span className="text-gold">Called it. </span> : <span className="text-live">Not this time. </span>}

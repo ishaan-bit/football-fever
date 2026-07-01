@@ -5,6 +5,7 @@ import { Brain, Check, X, Flame, RotateCcw, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useSound } from "@/hooks/use-sound";
+import { useHaptics } from "@/hooks/use-haptics";
 import { useConfetti } from "@/hooks/use-confetti";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import { cn, hslVar, seededRandom, hashSeed } from "@/lib/utils";
@@ -35,6 +36,7 @@ const BANK: TriviaQ[] = [
 
 export function TeamTrivia() {
   const { play } = useSound();
+  const { buzz } = useHaptics();
   const { celebrate } = useConfetti();
   const reduced = useReducedMotion();
 
@@ -61,6 +63,8 @@ export function TeamTrivia() {
 
   const onPick = (i: number) => {
     if (picked !== null || !q) return;
+    buzz("tap");
+    play("pop");
     setPicked(i);
     const correct = i === q.answer;
     if (correct) {
@@ -69,25 +73,31 @@ export function TeamTrivia() {
       setScore((s) => s + pts);
       setStreak((st) => st + 1);
       setCorrectCount((c) => c + 1);
-      play("win");
+      buzz("success");
+      play("goal");
     } else {
       setStreak(0);
+      buzz("fail");
       play("error");
     }
   };
 
   const advance = () => {
+    buzz("select");
     play("click");
     setPicked(null);
     const nextStep = step + 1;
     setStep(nextStep);
     if (nextStep >= PICK && correctCount >= 4) {
+      buzz("win");
+      play("win");
       celebrate(["#19c3ff", "#22e0a1", "#ffce3a"]);
     }
   };
 
   const restart = () => {
-    play("click");
+    buzz("tap");
+    play("whistle");
     setRun((r) => r + 1);
     setStep(0);
     setScore(0);
@@ -110,7 +120,11 @@ export function TeamTrivia() {
       <div className="flex flex-col items-center gap-4 py-2 text-center">
         <motion.div
           initial={{ scale: reduced ? 1 : 0.4, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
+          animate={
+            reduced
+              ? { scale: 1, opacity: 1 }
+              : { scale: [0.4, 1.12, 1], opacity: 1 }
+          }
           transition={{ type: "spring", stiffness: 200, damping: 14 }}
           className="grid h-24 w-24 place-items-center rounded-full border"
           style={{ borderColor: hslVar(grade.color, 0.5), background: hslVar(grade.color, 0.12) }}
@@ -119,15 +133,21 @@ export function TeamTrivia() {
             {grade.letter}
           </span>
         </motion.div>
-        <div>
+        <motion.div
+          initial={{ opacity: 0, y: reduced ? 0 : 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.12, type: "spring", stiffness: 260, damping: 20 }}
+        >
           <p className="font-display text-2xl font-bold tabular-nums">{score.toLocaleString()} pts</p>
           <p className="text-sm text-muted-foreground">
             {correctCount}/{PICK} correct · {grade.label}
           </p>
-        </div>
-        <Button className="w-full" variant="electric" onClick={restart}>
-          <RotateCcw className="h-4 w-4" /> Play again
-        </Button>
+        </motion.div>
+        <motion.div className="w-full" whileTap={reduced ? undefined : { scale: 0.96 }}>
+          <Button className="w-full" variant="electric" onClick={restart}>
+            <RotateCcw className="h-4 w-4" /> Play again
+          </Button>
+        </motion.div>
       </div>
     );
   }
@@ -146,7 +166,20 @@ export function TeamTrivia() {
             <span className="flex items-center gap-1 text-live">
               <Flame className="h-3.5 w-3.5" /> {streak}× ({1 + Math.min(streak, 4) * 0.5}x)
             </span>
-            <span className="font-display font-bold tabular-nums text-electric">{score}</span>
+            <span className="font-display font-bold tabular-nums text-electric">
+              <AnimatePresence mode="popLayout" initial={false}>
+                <motion.span
+                  key={score}
+                  initial={reduced ? false : { scale: 0.6, opacity: 0, y: -4 }}
+                  animate={{ scale: 1, opacity: 1, y: 0 }}
+                  exit={reduced ? undefined : { scale: 1.3, opacity: 0, y: 4 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 24 }}
+                  className="inline-block"
+                >
+                  {score}
+                </motion.span>
+              </AnimatePresence>
+            </span>
           </span>
         </div>
         <Progress value={(step / PICK) * 100} indicatorClassName="bg-electric" />
@@ -175,7 +208,15 @@ export function TeamTrivia() {
                   key={opt}
                   onClick={() => onPick(i)}
                   disabled={revealed}
-                  whileTap={reduced ? undefined : { scale: 0.98 }}
+                  whileTap={reduced ? undefined : { scale: 0.92 }}
+                  animate={
+                    reduced || !isPicked
+                      ? undefined
+                      : isAnswer
+                        ? { scale: [1, 1.05, 1] }
+                        : { x: [0, -6, 6, -4, 4, 0] }
+                  }
+                  transition={{ duration: 0.4 }}
                   className={cn(
                     "flex items-center justify-between rounded-2xl border px-4 py-3.5 text-left text-sm font-semibold transition-colors disabled:cursor-default",
                     "border-white/[0.08] bg-white/[0.03]",
@@ -196,17 +237,24 @@ export function TeamTrivia() {
 
       {picked !== null && (
         <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between">
-          <span className="flex items-center gap-1.5 text-sm font-semibold">
+          <motion.span
+            className="flex items-center gap-1.5 text-sm font-semibold"
+            initial={reduced ? false : { scale: 0.7, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 400, damping: 16 }}
+          >
             {picked === q?.answer ? (
               <span className="text-pitch">Correct!</span>
             ) : (
               <span className="text-live">Not quite.</span>
             )}
-          </span>
-          <Button variant="electric" size="sm" onClick={advance}>
-            {step + 1 >= PICK ? <Trophy className="h-4 w-4" /> : <Brain className="h-4 w-4" />}
-            {step + 1 >= PICK ? "See result" : "Next"}
-          </Button>
+          </motion.span>
+          <motion.div whileTap={reduced ? undefined : { scale: 0.92 }}>
+            <Button variant="electric" size="sm" onClick={advance}>
+              {step + 1 >= PICK ? <Trophy className="h-4 w-4" /> : <Brain className="h-4 w-4" />}
+              {step + 1 >= PICK ? "See result" : "Next"}
+            </Button>
+          </motion.div>
         </motion.div>
       )}
     </div>

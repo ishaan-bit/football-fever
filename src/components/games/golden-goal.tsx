@@ -5,6 +5,7 @@ import { Clock, RotateCcw, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSound } from "@/hooks/use-sound";
 import { useConfetti } from "@/hooks/use-confetti";
+import { useHaptics } from "@/hooks/use-haptics";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import { cn, hslVar, seededRandom, hashSeed } from "@/lib/utils";
 
@@ -59,6 +60,7 @@ function scoreFor(pick: number, attempt: number): Result {
 export function GoldenGoal() {
   const { play } = useSound();
   const { celebrate } = useConfetti();
+  const { buzz } = useHaptics();
   const reduced = useReducedMotion();
 
   const [pick, setPick] = useState(45);
@@ -67,6 +69,7 @@ export function GoldenGoal() {
 
   const lockIn = () => {
     play("whistle");
+    buzz("impact");
     const a = attempt + 1;
     setAttempt(a);
     const r = scoreFor(pick, a);
@@ -74,17 +77,21 @@ export function GoldenGoal() {
     window.setTimeout(() => {
       if (r.diff === 0) {
         play("win");
+        buzz("win");
         celebrate(["#ffce3a", "#22e0a1", "#19c3ff"]);
       } else if (r.points > 0) {
         play("goal");
+        buzz("success");
       } else {
         play("error");
+        buzz("fail");
       }
     }, reduced ? 0 : 250);
   };
 
   const reset = () => {
     play("click");
+    buzz("tap");
     setResult(null);
   };
 
@@ -99,9 +106,20 @@ export function GoldenGoal() {
       {/* your pick display */}
       <div className="grid place-items-center gap-1 rounded-2xl border border-white/[0.07] bg-white/[0.02] py-5">
         <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Your minute</span>
-        <span className="font-display text-5xl font-black tabular-nums" style={{ color: hslVar(ACCENT) }}>
-          {pick}'
-        </span>
+        <div className="font-display text-5xl font-black tabular-nums" style={{ color: hslVar(ACCENT) }}>
+          <AnimatePresence mode="popLayout" initial={false}>
+            <motion.span
+              key={pick}
+              className="inline-block"
+              initial={reduced ? false : { scale: 0.6, opacity: 0, y: 6 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={reduced ? { opacity: 0 } : { scale: 0.6, opacity: 0, y: -6 }}
+              transition={{ type: "spring", stiffness: 500, damping: 22 }}
+            >
+              {pick}'
+            </motion.span>
+          </AnimatePresence>
+        </div>
       </div>
 
       {/* slider */}
@@ -116,6 +134,7 @@ export function GoldenGoal() {
             onChange={(e) => {
               setPick(Number(e.target.value));
               play("click");
+              buzz("tick");
             }}
             className="w-full cursor-pointer accent-gold disabled:cursor-default"
             aria-label="Pick the minute"
@@ -141,11 +160,13 @@ export function GoldenGoal() {
       {!result && (
         <div className="flex flex-wrap justify-center gap-2">
           {[15, 30, 44, 67, 88].map((m) => (
-            <button
+            <motion.button
               key={m}
+              whileTap={{ scale: 0.92 }}
               onClick={() => {
                 setPick(m);
-                play("click");
+                play("pop");
+                buzz("select");
               }}
               className={cn(
                 "rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
@@ -153,7 +174,7 @@ export function GoldenGoal() {
               )}
             >
               {m}'
-            </button>
+            </motion.button>
           ))}
         </div>
       )}
@@ -163,21 +184,44 @@ export function GoldenGoal() {
         {result ? (
           <motion.div
             key="result"
-            initial={{ opacity: 0, y: reduced ? 0 : 10 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0, y: reduced ? 0 : 10, scale: reduced ? 1 : 0.96 }}
+            animate={
+              reduced
+                ? { opacity: 1, y: 0, scale: 1 }
+                : result.points === 0
+                  ? { opacity: 1, y: 0, scale: 1, x: [0, -8, 8, -5, 5, 0] }
+                  : { opacity: 1, y: 0, scale: 1 }
+            }
+            transition={
+              result.points === 0
+                ? { x: { duration: 0.45 }, default: { type: "spring", stiffness: 320, damping: 22 } }
+                : { type: "spring", stiffness: 320, damping: 20 }
+            }
             className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 text-center"
           >
             <p className="text-[11px] uppercase tracking-wide text-muted-foreground">The goal came in the</p>
-            <p className="font-display text-4xl font-black tabular-nums" style={{ color: hslVar(result.color) }}>
+            <motion.p
+              className="font-display text-4xl font-black tabular-nums"
+              style={{ color: hslVar(result.color) }}
+              initial={reduced ? false : { scale: 0.4, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring", stiffness: 400, damping: 16, delay: reduced ? 0 : 0.1 }}
+            >
               {result.actual}'
-            </p>
+            </motion.p>
             <p className="mt-1 text-sm">
               You called {pick}' —{" "}
               <b style={{ color: hslVar(result.color) }}>{result.diff === 0 ? "spot on" : `${result.diff} min off`}</b>
             </p>
-            <p className="mt-2 font-display text-lg font-bold" style={{ color: hslVar(result.color) }}>
+            <motion.p
+              className="mt-2 font-display text-lg font-bold"
+              style={{ color: hslVar(result.color) }}
+              initial={reduced ? false : { scale: 0.6, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring", stiffness: 420, damping: 18, delay: reduced ? 0 : 0.2 }}
+            >
               +{result.points} pts
-            </p>
+            </motion.p>
             <p className="text-xs text-muted-foreground">{result.label}</p>
             <Button className="mt-3 w-full" variant="gold" onClick={reset}>
               <RotateCcw className="h-4 w-4" /> Play again

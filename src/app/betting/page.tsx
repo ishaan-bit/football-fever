@@ -319,7 +319,7 @@ function WalletStrip({ hydrated }: { hydrated: boolean }) {
   };
 
   return (
-    <div className="grid gap-3 lg:grid-cols-[1fr_1.4fr]">
+    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
       {/* Balance */}
       <div className="flex items-center justify-between rounded-3xl border border-gold/20 glass p-5">
         <div className="flex items-center gap-3.5">

@@ -73,18 +73,25 @@ export function MatchRoom({ matchId }: { matchId: string }) {
 
   const home = getTeam(match.homeTeamId);
   const away = getTeam(match.awayTeamId);
-  const winnerPollOptions = [
-    { id: "home", label: home?.name ?? "Home" },
-    { id: "draw", label: "Draw" },
-    { id: "away", label: away?.name ?? "Away" },
-  ];
+  // Knockouts are win-or-go-home — no "Draw" option.
+  const knockout = match.stage !== "group";
+  const winnerPollOptions = knockout
+    ? [
+        { id: "home", label: home?.name ?? "Home" },
+        { id: "away", label: away?.name ?? "Away" },
+      ]
+    : [
+        { id: "home", label: home?.name ?? "Home" },
+        { id: "draw", label: "Draw" },
+        { id: "away", label: away?.name ?? "Away" },
+      ];
 
   return (
     <div className="min-h-dvh">
       <MatchTopbar match={match} />
       <MatchHero match={match} momentum={oracle?.momentum ?? 0} watchingCount={presence.watching} />
 
-      <div className="mx-auto flex max-w-6xl flex-col gap-5 px-3 py-5 sm:px-5 lg:grid lg:grid-cols-[1fr_minmax(340px,400px)]">
+      <div className="mx-auto flex max-w-6xl flex-col gap-5 px-3 py-5 sm:px-5 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(340px,400px)]">
         {/* MAIN */}
         <div className="order-2 lg:order-1">
           <Tabs defaultValue="pitch">

@@ -4,6 +4,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Laugh, Timer, RotateCcw, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSound } from "@/hooks/use-sound";
+import { useHaptics } from "@/hooks/use-haptics";
+import { useConfetti } from "@/hooks/use-confetti";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import { cn, hslVar, seededRandom, hashSeed } from "@/lib/utils";
 
@@ -32,6 +34,8 @@ function buildRound(attempt: number, round: number): RoundState {
 
 export function EmojiBattle() {
   const { play } = useSound();
+  const { buzz } = useHaptics();
+  const { celebrate } = useConfetti();
   const reduced = useReducedMotion();
 
   const [phase, setPhase] = useState<Phase>("idle");
@@ -56,10 +60,20 @@ export function EmojiBattle() {
     (finalScore: number) => {
       clearRaf();
       setPhase("over");
-      setBest((b) => Math.max(b, finalScore));
+      setBest((b) => {
+        const next = Math.max(b, finalScore);
+        if (finalScore > 0 && finalScore >= b) {
+          buzz("win");
+          celebrate();
+        } else {
+          buzz("success");
+        }
+        return next;
+      });
+      play("whistle");
       play("win");
     },
-    [play]
+    [play, buzz, celebrate]
   );
 
   const advance = useCallback(
@@ -74,6 +88,7 @@ export function EmojiBattle() {
       setRound(nextRound);
       setProgress(1);
       startRef.current = performance.now();
+      buzz("tick");
       play("pop");
 
       const tick = () => {
@@ -84,6 +99,7 @@ export function EmojiBattle() {
           if (!answeredRef.current) {
             answeredRef.current = true;
             setFlash({ text: "Too slow!", good: false });
+            buzz("fail");
             play("error");
             const ns = Math.max(0, runningScore - 40);
             setScore(ns);
@@ -95,7 +111,7 @@ export function EmojiBattle() {
       };
       rafRef.current = requestAnimationFrame(tick);
     },
-    [finish, play, reduced]
+    [finish, play, buzz, reduced]
   );
 
   const start = () => {
@@ -105,6 +121,8 @@ export function EmojiBattle() {
     setRound(0);
     setFlash(null);
     setPhase("playing");
+    buzz("select");
+    play("whistle");
     advance(0, a, 0);
   };
 
@@ -120,12 +138,14 @@ export function EmojiBattle() {
       const ns = score + pts;
       setScore(ns);
       setFlash({ text: `+${pts}`, good: true });
-      play("win");
+      buzz(speed > 0.5 ? "impact" : "success");
+      play("goal");
       window.setTimeout(() => advance(round + 1, attempt, ns), reduced ? 0 : 360);
     } else {
       const ns = Math.max(0, score - 30);
       setScore(ns);
       setFlash({ text: "Miss −30", good: false });
+      buzz("fail");
       play("error");
       window.setTimeout(() => advance(round + 1, attempt, ns), reduced ? 0 : 360);
     }
@@ -147,11 +167,19 @@ export function EmojiBattle() {
 
       {phase === "idle" && (
         <div className="grid place-items-center gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.02] py-10 text-center">
-          <span className="text-5xl">🤯</span>
+          <motion.span
+            className="text-5xl"
+            animate={reduced ? undefined : { rotate: [0, -8, 8, -4, 0] }}
+            transition={reduced ? undefined : { duration: 2.4, repeat: Infinity, repeatDelay: 1.2 }}
+          >
+            🤯
+          </motion.span>
           <p className="font-display text-lg font-semibold">Out-react the room.</p>
-          <Button onClick={start} style={{ background: hslVar(ACCENT), color: "#fff" }}>
-            <Play className="h-4 w-4" /> Start battle
-          </Button>
+          <motion.div whileTap={reduced ? undefined : { scale: 0.92 }}>
+            <Button onClick={start} style={{ background: hslVar(ACCENT), color: "#fff" }}>
+              <Play className="h-4 w-4" /> Start battle
+            </Button>
+          </motion.div>
         </div>
       )}
 
@@ -185,12 +213,20 @@ export function EmojiBattle() {
           </div>
 
           {/* grid */}
-          <div className="relative grid grid-cols-3 gap-2.5">
+          <motion.div
+            key={round}
+            className="relative grid grid-cols-3 gap-2.5"
+            animate={flash && !flash.good && !reduced ? { x: [0, -7, 7, -5, 5, 0] } : undefined}
+            transition={{ duration: 0.32 }}
+          >
             {data.grid.map((e, i) => (
               <motion.button
                 key={`${e}-${i}`}
                 onClick={() => onTap(e)}
-                whileTap={reduced ? undefined : { scale: 0.9 }}
+                initial={reduced ? false : { scale: 0.6, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={reduced ? undefined : { type: "spring", stiffness: 460, damping: 24, delay: i * 0.02 }}
+                whileTap={reduced ? undefined : { scale: 0.92 }}
                 className="grid aspect-square place-items-center rounded-2xl border border-white/[0.07] bg-white/[0.03] text-3xl transition-colors hover:bg-white/[0.07]"
               >
                 {e}
@@ -215,23 +251,36 @@ export function EmojiBattle() {
                 </motion.div>
               )}
             </AnimatePresence>
-          </div>
+          </motion.div>
         </div>
       )}
 
       {phase === "over" && (
-        <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5 text-center">
+        <motion.div
+          className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5 text-center"
+          initial={reduced ? false : { opacity: 0, scale: 0.9, y: 12 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={reduced ? undefined : { type: "spring", stiffness: 320, damping: 22 }}
+        >
           <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Final score</p>
-          <p className="font-display text-4xl font-black tabular-nums" style={{ color: hslVar(ACCENT) }}>
+          <motion.p
+            className="font-display text-4xl font-black tabular-nums"
+            style={{ color: hslVar(ACCENT) }}
+            initial={reduced ? false : { scale: 0.6 }}
+            animate={reduced ? undefined : { scale: [0.6, 1.18, 1] }}
+            transition={reduced ? undefined : { duration: 0.5, delay: 0.1, times: [0, 0.6, 1] }}
+          >
             {score.toLocaleString()}
-          </p>
+          </motion.p>
           <p className="mt-1 text-sm text-muted-foreground">
             {score >= best && score > 0 ? "New personal best! 🏆" : `Best: ${best.toLocaleString()}`}
           </p>
-          <Button className="mt-4 w-full" variant="outline" onClick={start}>
-            <RotateCcw className="h-4 w-4" /> Play again
-          </Button>
-        </div>
+          <motion.div whileTap={reduced ? undefined : { scale: 0.96 }}>
+            <Button className="mt-4 w-full" variant="outline" onClick={start}>
+              <RotateCcw className="h-4 w-4" /> Play again
+            </Button>
+          </motion.div>
+        </motion.div>
       )}
 
       {phase === "idle" && (
@@ -244,11 +293,23 @@ export function EmojiBattle() {
 }
 
 function Stat({ label, value, accent }: { label: string; value: string; accent: string }) {
+  const reduced = useReducedMotion();
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3 text-center">
       <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="mt-0.5 font-display text-lg font-bold tabular-nums" style={{ color: hslVar(accent) }}>
-        {value}
+        <AnimatePresence mode="popLayout" initial={false}>
+          <motion.span
+            key={value}
+            className="inline-block"
+            initial={reduced ? false : { scale: 0.5, opacity: 0, y: -6 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={reduced ? { opacity: 0 } : { scale: 0.5, opacity: 0, y: 6 }}
+            transition={{ type: "spring", stiffness: 520, damping: 22 }}
+          >
+            {value}
+          </motion.span>
+        </AnimatePresence>
       </p>
     </div>
   );

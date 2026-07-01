@@ -1,9 +1,10 @@
 "use client";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Goal, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSound } from "@/hooks/use-sound";
+import { useHaptics } from "@/hooks/use-haptics";
 import { useConfetti } from "@/hooks/use-confetti";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import { cn, hslVar, seededRandom, hashSeed } from "@/lib/utils";
@@ -31,7 +32,8 @@ interface Shot {
 
 export function PenaltyPanic() {
   const { play } = useSound();
-  const { burst } = useConfetti();
+  const { buzz } = useHaptics();
+  const { celebrate, burst } = useConfetti();
   const reduced = useReducedMotion();
 
   const [shots, setShots] = useState<Shot[]>([]);
@@ -58,15 +60,18 @@ export function PenaltyPanic() {
     const shot: Shot = { pick, keeper, scored };
     setCurrent(shot);
     play("whistle");
+    buzz("impact");
 
     const resolve = () => {
       if (scored) {
         play("goal");
+        buzz("success");
         const pos = ZONE_POS[pick]!;
         // burst near the picked zone (approximate, upper area of screen)
         burst(0.5, 0.4, ["#22e0a1", "#ffce3a", "#19c3ff"]);
       } else {
         play("error");
+        buzz("fail");
       }
       setShots((s) => [...s, shot]);
       setCurrent(null);
@@ -78,6 +83,7 @@ export function PenaltyPanic() {
 
   const restart = () => {
     play("click");
+    buzz("tap");
     setShots([]);
     setCurrent(null);
     setLocked(false);
@@ -95,6 +101,22 @@ export function PenaltyPanic() {
 
   const keeperPos = current ? ZONE_POS[current.keeper]! : ZONE_POS[4]!;
 
+  // celebrate a great final result exactly once per completed game
+  const celebrated = useRef(false);
+  useEffect(() => {
+    if (!done) {
+      celebrated.current = false;
+      return;
+    }
+    if (celebrated.current) return;
+    celebrated.current = true;
+    if (goals >= 4) {
+      play("win");
+      buzz("win");
+      void celebrate(goals === 5 ? ["#ffce3a", "#22e0a1", "#19c3ff"] : undefined);
+    }
+  }, [done, goals, play, buzz, celebrate]);
+
   return (
     <div className="flex flex-col gap-5">
       <p className="text-xs text-muted-foreground">
@@ -104,7 +126,19 @@ export function PenaltyPanic() {
       {/* scoreline */}
       <div className="flex items-center justify-between rounded-2xl border border-white/[0.07] bg-white/[0.02] px-4 py-3">
         <span className="text-sm font-semibold">
-          You <span className="font-display text-xl font-bold text-magenta tabular-nums">{goals}</span>
+          You{" "}
+          <AnimatePresence mode="popLayout" initial={false}>
+            <motion.span
+              key={goals}
+              className="inline-block font-display text-xl font-bold text-magenta tabular-nums"
+              initial={reduced ? false : { scale: 0.4, y: -6, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={reduced ? { opacity: 0 } : { scale: 1.6, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 500, damping: 18 }}
+            >
+              {goals}
+            </motion.span>
+          </AnimatePresence>
         </span>
         <div className="flex gap-1.5">
           {Array.from({ length: TOTAL }).map((_, i) => {
@@ -126,7 +160,17 @@ export function PenaltyPanic() {
       </div>
 
       {/* goal */}
-      <div className="relative mx-auto aspect-[3/2] w-full max-w-sm select-none overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-electric/10 to-pitch/10 p-2">
+      <motion.div
+        className="relative mx-auto aspect-[3/2] w-full max-w-sm select-none overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-electric/10 to-pitch/10 p-2"
+        animate={
+          reduced || !current
+            ? undefined
+            : current.scored
+              ? { scale: [1, 1.02, 1] }
+              : { x: [0, -7, 7, -5, 5, 0] }
+        }
+        transition={{ delay: current && !reduced ? 0.5 : 0, duration: 0.35 }}
+      >
         {/* net */}
         <div
           className="absolute inset-2 rounded-xl border border-white/15"
@@ -140,10 +184,17 @@ export function PenaltyPanic() {
         {/* zones */}
         <div className="relative grid h-full grid-cols-3 grid-rows-2 gap-1.5">
           {ZONES.map((z) => (
-            <button
+            <motion.button
               key={z}
+              onTapStart={() => {
+                if (locked || done) return;
+                play("pop");
+                buzz("tap");
+              }}
               onClick={() => shoot(z)}
               disabled={locked || done}
+              whileTap={reduced ? undefined : { scale: 0.92 }}
+              transition={{ type: "spring", stiffness: 600, damping: 22 }}
               className={cn(
                 "group rounded-lg border border-white/[0.06] transition-colors disabled:cursor-default",
                 "hover:border-magenta/50 hover:bg-magenta/10"
@@ -153,7 +204,7 @@ export function PenaltyPanic() {
               <span className="grid h-full place-items-center text-xl opacity-0 transition-opacity group-hover:opacity-100">
                 🎯
               </span>
-            </button>
+            </motion.button>
           ))}
         </div>
 
@@ -212,17 +263,31 @@ export function PenaltyPanic() {
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
+      </motion.div>
 
       {/* footer / result */}
       {done ? (
-        <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 text-center">
-          <p className="font-display text-2xl font-black tabular-nums">{goals} / {TOTAL}</p>
+        <motion.div
+          className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 text-center"
+          initial={reduced ? false : { opacity: 0, scale: 0.9, y: 12 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ type: "spring", stiffness: 260, damping: 20 }}
+        >
+          <motion.p
+            className="font-display text-2xl font-black tabular-nums"
+            initial={reduced ? false : { scale: 0.6 }}
+            animate={reduced ? undefined : { scale: [0.6, 1.18, 1] }}
+            transition={{ delay: 0.1, duration: 0.4 }}
+          >
+            {goals} / {TOTAL}
+          </motion.p>
           {grade && <p className="mt-1 text-sm font-semibold" style={{ color: hslVar(grade.color) }}>{grade.label}</p>}
-          <Button variant="default" className="mt-3 w-full" onClick={restart} style={{ background: hslVar(ACCENT), color: "hsl(var(--background))" }}>
-            <RotateCcw className="h-4 w-4" /> Play again
-          </Button>
-        </div>
+          <motion.div whileTap={reduced ? undefined : { scale: 0.96 }}>
+            <Button variant="default" className="mt-3 w-full" onClick={restart} style={{ background: hslVar(ACCENT), color: "hsl(var(--background))" }}>
+              <RotateCcw className="h-4 w-4" /> Play again
+            </Button>
+          </motion.div>
+        </motion.div>
       ) : (
         <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
           <Goal className="h-3.5 w-3.5 text-magenta" /> Pick a corner. The keeper's already guessing.
