@@ -7,6 +7,7 @@ import { FRIENDS, avatarFor } from "@/lib/data/people";
 import { hostOnEvent, hostWelcome, hostIdleNudge } from "@/lib/ai/host";
 import { statusFromClock } from "@/lib/data";
 import { seededRandom, hashSeed } from "@/lib/utils";
+import { roomsLive, fetchMessages, publishMessage } from "@/lib/rooms/client";
 
 const AMBIENT_LINES = [
   "this ref is having a mare 😤",
@@ -53,9 +54,45 @@ export function useRoom(roomId: string, options: UseRoomOptions = {}) {
   const pinnedIds = useSocialStore((s) => s.pinned[roomId]) ?? [];
 
   const [typing, setTyping] = useState<Record<string, number>>({});
+  const [live, setLive] = useState(false);
+  const liveRef = useRef(false);
   const channelRef = useRef<BroadcastChannel | null>(null);
   const announced = useRef<Set<string> | null>(null);
   const welcomed = useRef(false);
+  const sinceRef = useRef(0);
+
+  // Detect whether a real backend is available (memoized across the app).
+  useEffect(() => {
+    roomsLive().then((isLive) => {
+      liveRef.current = isLive;
+      setLive(isLive);
+    });
+  }, []);
+
+  // Live mode: poll the backend for messages from real people and merge them
+  // (de-duped by id) into the shared store. Runs only when a backend exists.
+  useEffect(() => {
+    if (!live) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      if (typeof document !== "undefined" && document.hidden) {
+        timer = setTimeout(poll, 3000);
+        return;
+      }
+      const { messages: incoming, now } = await fetchMessages(roomId, sinceRef.current);
+      if (stopped) return;
+      if (incoming.length) store.mergeMessages(roomId, incoming);
+      sinceRef.current = now;
+      timer = setTimeout(poll, 3000);
+    };
+    poll();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live, roomId]);
 
   // Seed the room + cross-tab transport.
   useEffect(() => {
@@ -113,8 +150,9 @@ export function useRoom(roomId: string, options: UseRoomOptions = {}) {
             const ai = hostOnEvent(ev, m);
             if (ai) store.addAiMessage(roomId, ai);
             if ((ev.type === "goal" || ev.type === "penalty_goal") && onGoal) onGoal(ev, m);
-            // A friend piles on after a goal.
-            if (ev.type === "goal" || ev.type === "penalty_goal") {
+            // A friend piles on after a goal (simulated demo chatter only —
+            // in a live room the real people do the reacting).
+            if (!liveRef.current && (ev.type === "goal" || ev.type === "penalty_goal")) {
               const f = FRIENDS[Math.floor(seededRandom(hashSeed(ev.id))() * FRIENDS.length)]!;
               const line = GOAL_REACTIONS[Math.floor(seededRandom(hashSeed(ev.id + "r"))() * GOAL_REACTIONS.length)]!;
               store.sendMessage({
@@ -135,22 +173,26 @@ export function useRoom(roomId: string, options: UseRoomOptions = {}) {
         }
       }
 
-      // 2) Ambient friend chatter (demo only, gently paced).
-      if (i % 3 === 0) {
-        const seed = seededRandom(hashSeed(roomId + i));
-        if (seed() < 0.7) {
-          const f = FRIENDS[Math.floor(seed() * FRIENDS.length)]!;
-          const line = AMBIENT_LINES[Math.floor(seed() * AMBIENT_LINES.length)]!;
-          store.sendMessage({
-            roomId, userId: f.id, authorName: f.name, authorAvatar: f.avatar,
-            kind: "text", body: line,
-          });
+      // Ambient chatter + idle nudges are demo texture only. In a live room the
+      // real people carry the conversation, so we stay out of their way.
+      if (!liveRef.current) {
+        // 2) Ambient friend chatter (gently paced).
+        if (i % 3 === 0) {
+          const seed = seededRandom(hashSeed(roomId + i));
+          if (seed() < 0.7) {
+            const f = FRIENDS[Math.floor(seed() * FRIENDS.length)]!;
+            const line = AMBIENT_LINES[Math.floor(seed() * AMBIENT_LINES.length)]!;
+            store.sendMessage({
+              roomId, userId: f.id, authorName: f.name, authorAvatar: f.avatar,
+              kind: "text", body: line,
+            });
+          }
         }
-      }
 
-      // 3) Occasional Oracle nudge when it's quiet.
-      if (i % 11 === 0 && seededRandom(hashSeed(roomId + "idle" + i))() < 0.5) {
-        store.addAiMessage(roomId, hostIdleNudge(match?.()));
+        // 3) Occasional Oracle nudge when it's quiet.
+        if (i % 11 === 0 && seededRandom(hashSeed(roomId + "idle" + i))() < 0.5) {
+          store.addAiMessage(roomId, hostIdleNudge(match?.()));
+        }
       }
     }, 5200);
     return () => clearInterval(id);
@@ -163,16 +205,27 @@ export function useRoom(roomId: string, options: UseRoomOptions = {}) {
       const msg = store.sendMessage({
         roomId,
         userId: profile.id,
-        authorName: "You",
+        // Your real nickname travels with the message so everyone else in the
+        // room sees who's talking — not a generic "You".
+        authorName: profile.name,
         authorAvatar: profile.avatar,
         kind,
         body,
         ...extra,
       });
-      channelRef.current?.postMessage({ type: "msg", msg });
+      if (liveRef.current) {
+        // Broadcast to real people across devices via the backend. Our own
+        // message is added optimistically above; the next poll will echo it
+        // back and merge de-dupes it by id, so we don't advance the cursor here
+        // (avoids skipping others' messages under clock skew).
+        publishMessage(roomId, msg);
+      } else {
+        // Demo mode: same-browser cross-tab echo.
+        channelRef.current?.postMessage({ type: "msg", msg });
+      }
       return msg;
     },
-    [roomId, profile.id, profile.avatar, store]
+    [roomId, profile.id, profile.name, profile.avatar, store]
   );
 
   const react = useCallback(
@@ -186,8 +239,8 @@ export function useRoom(roomId: string, options: UseRoomOptions = {}) {
   const pin = useCallback((messageId: string) => store.togglePin(roomId, messageId), [roomId, store]);
 
   const broadcastTyping = useCallback(() => {
-    channelRef.current?.postMessage({ type: "typing", name: "You" });
-  }, []);
+    channelRef.current?.postMessage({ type: "typing", name: profile.name });
+  }, [profile.name]);
 
   const typingNames = useMemo(() => Object.keys(typing), [typing]);
 

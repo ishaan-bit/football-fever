@@ -12,6 +12,8 @@ interface SocialState {
   challenges: FriendlyChallenge[];
   ensureRoom: (roomId: string) => void;
   sendMessage: (msg: Omit<ChatMessage, "id" | "createdAt" | "reactions"> & { id?: string }) => ChatMessage;
+  /** Merge messages arriving from the live backend, de-duped by id. */
+  mergeMessages: (roomId: string, incoming: ChatMessage[]) => void;
   addAiMessage: (roomId: string, ai: AiHostMessage) => void;
   addReaction: (roomId: string, messageId: string, emoji: string, userId: string) => void;
   togglePin: (roomId: string, messageId: string) => void;
@@ -49,6 +51,17 @@ export const useSocialStore = create<SocialState>()(
         }));
         return msg;
       },
+      mergeMessages: (roomId, incoming) =>
+        set((s) => {
+          const existing = s.messages[roomId] ?? [];
+          const known = new Set(existing.map((m) => m.id));
+          const fresh = incoming.filter((m) => m && !known.has(m.id));
+          if (!fresh.length) return {};
+          const merged = [...existing, ...fresh]
+            .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
+            .slice(-200);
+          return { messages: { ...s.messages, [roomId]: merged } };
+        }),
       addAiMessage: (roomId, ai) => {
         const msg: ChatMessage = {
           id: ai.id,

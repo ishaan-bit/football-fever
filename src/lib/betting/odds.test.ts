@@ -74,12 +74,18 @@ describe("makeOdds", () => {
     ]);
   });
 
-  it("only offers the To Advance market in knockout stages", () => {
+  it("prices knockout ties as a 2-way To Advance instead of a 1X2", () => {
+    // Group stage: a 3-way Match Result including the draw.
     const group = oddsFor(makeMatch({ stage: "group" }));
-    expect(group.markets.some((m) => m.key === "to_qualify")).toBe(false);
+    const groupResult = group.markets.find((m) => m.key === "match_result")!;
+    expect(groupResult.label).toBe("Match Result");
+    expect(groupResult.selections.map((s) => s.id).sort()).toEqual(["away", "draw", "home"]);
 
+    // Knockout: the same market becomes a 2-way "To Advance" (no draw over the tie).
     const knockout = oddsFor(makeMatch({ stage: "r32" }));
-    expect(knockout.markets.some((m) => m.key === "to_qualify")).toBe(true);
+    const koResult = knockout.markets.find((m) => m.key === "match_result")!;
+    expect(koResult.label).toBe("To Advance");
+    expect(koResult.selections.map((s) => s.id).sort()).toEqual(["away", "home"]);
   });
 
   it("bakes the margin in so implied probabilities overround above 1", () => {
