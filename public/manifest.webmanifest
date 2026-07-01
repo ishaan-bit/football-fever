@@ -1,0 +1,43 @@
+{
+  "name": "Football Fever — World Cup 2026 Watch Party",
+  "short_name": "Football Fever",
+  "description": "The place your group gathers for every match of the FIFA World Cup 2026. Watch together, predict live, play, and celebrate.",
+  "id": "/",
+  "start_url": "/?source=pwa",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#06070D",
+  "theme_color": "#06070D",
+  "categories": ["sports", "social", "entertainment"],
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Today's Matches",
+      "url": "/fixtures",
+      "description": "Jump to today's fixtures"
+    },
+    {
+      "name": "The Oracle",
+      "url": "/oracle",
+      "description": "See predictions for the next match"
+    },
+    {
+      "name": "Leaderboard",
+      "url": "/leaderboard",
+      "description": "Check your standing"
+    }
+  ]
+}

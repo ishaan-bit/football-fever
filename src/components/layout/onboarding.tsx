@@ -1,0 +1,148 @@
+"use client";
+import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { ArrowRight, Check, Search, Sparkles } from "lucide-react";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { TeamCrest } from "@/components/shared/team-crest";
+import { useUserStore } from "@/stores/user";
+import { useHydrated } from "@/hooks/use-hydrated";
+import { ALL_TEAMS } from "@/lib/data";
+import { cn } from "@/lib/utils";
+
+const VIBES = ["Here for the chaos", "Tactical nerd", "Casual & chill", "Ultra. No notes.", "Just here for the memes"];
+
+export function Onboarding() {
+  const hydrated = useHydrated();
+  const profile = useUserStore((s) => s.profile);
+  const onboarded = useUserStore((s) => s.onboarded);
+  const setName = useUserStore((s) => s.setName);
+  const setFavoriteTeam = useUserStore((s) => s.setFavoriteTeam);
+  const setVibe = useUserStore((s) => s.setVibe);
+  const complete = useUserStore((s) => s.completeOnboarding);
+
+  const [step, setStep] = useState(0);
+  const [name, setLocalName] = useState(profile.name === "You" ? "" : profile.name);
+  const [team, setTeam] = useState(profile.favoriteTeamId ?? "");
+  const [vibe, setLocalVibe] = useState(profile.vibe ?? "");
+  const [q, setQ] = useState("");
+
+  if (!hydrated || onboarded) return null;
+
+  const teams = ALL_TEAMS.filter((t) =>
+    t.name.toLowerCase().includes(q.toLowerCase()) || t.code.toLowerCase().includes(q.toLowerCase())
+  );
+
+  const finish = () => {
+    if (name.trim()) setName(name.trim());
+    if (team) setFavoriteTeam(team);
+    if (vibe) setVibe(vibe);
+    complete();
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && finish()}>
+      <DialogContent hideClose className="max-w-lg overflow-hidden p-0">
+        <DialogTitle className="sr-only">Welcome to Football Fever</DialogTitle>
+        <div className="relative h-28 overflow-hidden">
+          <div className="absolute inset-0 aurora-field" />
+          <div className="absolute inset-0 grid place-items-center">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Sparkles className="h-4 w-4 text-gold" />
+              <span className="text-gradient font-display text-lg font-bold">Football Fever</span>
+            </div>
+          </div>
+          <div className="absolute bottom-0 left-0 right-0 flex gap-1.5 px-6 pb-3">
+            {[0, 1, 2].map((i) => (
+              <span
+                key={i}
+                className={cn("h-1 flex-1 rounded-full transition-colors", i <= step ? "bg-electric" : "bg-white/15")}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="p-6 pt-4">
+          <AnimatePresence mode="wait">
+            {step === 0 && (
+              <motion.div key="s0" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }}>
+                <h2 className="font-display text-2xl font-bold">Welcome to the room.</h2>
+                <p className="mt-1.5 text-sm text-muted-foreground">
+                  This is where your group gathers for every match of the World Cup. First — what should we call you?
+                </p>
+                <Input
+                  autoFocus
+                  value={name}
+                  onChange={(e) => setLocalName(e.target.value)}
+                  placeholder="Your name or nickname"
+                  className="mt-5 h-12"
+                  onKeyDown={(e) => e.key === "Enter" && name.trim() && setStep(1)}
+                />
+                <Button className="mt-5 w-full" size="lg" disabled={!name.trim()} onClick={() => setStep(1)}>
+                  Continue <ArrowRight className="h-4 w-4" />
+                </Button>
+              </motion.div>
+            )}
+
+            {step === 1 && (
+              <motion.div key="s1" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }}>
+                <h2 className="font-display text-2xl font-bold">Who do you ride with?</h2>
+                <p className="mt-1.5 text-sm text-muted-foreground">Pick your team. The Oracle will hold it against you.</p>
+                <div className="relative mt-4">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search 48 nations…" className="pl-9" />
+                </div>
+                <div className="mt-3 grid max-h-56 grid-cols-2 gap-1.5 overflow-y-auto sm:grid-cols-3">
+                  {teams.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => setTeam(t.id)}
+                      className={cn(
+                        "flex items-center gap-2 rounded-xl border p-2 text-left text-sm transition",
+                        team === t.id ? "border-electric/50 bg-electric/10" : "border-white/[0.06] hover:bg-white/[0.04]"
+                      )}
+                    >
+                      <TeamCrest team={t} size="sm" />
+                      <span className="truncate text-xs font-medium">{t.name}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-5 flex gap-2">
+                  <Button variant="outline" onClick={() => setStep(0)}>Back</Button>
+                  <Button className="flex-1" onClick={() => setStep(2)}>
+                    {team ? "Continue" : "Skip for now"} <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+
+            {step === 2 && (
+              <motion.div key="s2" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }}>
+                <h2 className="font-display text-2xl font-bold">Set your vibe.</h2>
+                <p className="mt-1.5 text-sm text-muted-foreground">So the room knows what they're dealing with.</p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {VIBES.map((v) => (
+                    <button
+                      key={v}
+                      onClick={() => setLocalVibe(v)}
+                      className={cn(
+                        "rounded-full border px-3.5 py-2 text-sm transition",
+                        vibe === v ? "border-gold/50 bg-gold/10 text-gold" : "border-white/[0.08] hover:bg-white/[0.04]"
+                      )}
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
+                <Button className="mt-6 w-full" size="lg" variant="electric" onClick={finish}>
+                  <Check className="h-4 w-4" /> Enter Football Fever
+                </Button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
