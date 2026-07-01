@@ -42,3 +42,9 @@ yarn-error.log*
 
 .vercel
 .env*.local
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+database-debug.log

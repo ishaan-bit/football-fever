@@ -1,0 +1,45 @@
+rules_version = '2';
+
+// Football Fever is a play-money watch-party demo with guest (anonymous)
+// identities — there is no Firebase Auth and no sensitive data. Reads are open
+// so the room feels live; writes are open but shape/size-validated to curb
+// abuse. If this ever grows real accounts, gate writes on request.auth.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Live presence for each room (heartbeat docs; deleted on leave).
+    match /rooms/{roomId}/presence/{userId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 60;
+      allow delete: if true;
+    }
+
+    // Room chat.
+    match /rooms/{roomId}/messages/{messageId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.authorName is string
+        && request.resource.data.authorName.size() <= 60
+        && request.resource.data.body is string
+        && request.resource.data.body.size() <= 1200;
+    }
+
+    // Community roster (who has joined + nicknames).
+    match /people/{userId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 60;
+    }
+
+    // Scheduled match alerts + social pings.
+    match /notifications/{notificationId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.title is string
+        && request.resource.data.title.size() <= 200
+        && request.resource.data.body is string
+        && request.resource.data.body.size() <= 500;
+    }
+  }
+}

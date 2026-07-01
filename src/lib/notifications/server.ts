@@ -1,6 +1,5 @@
 import { getRedis } from "@/lib/redis";
-import { statusFromClock } from "@/lib/data";
-import { getTeam } from "@/lib/data/teams";
+import { computeDueAlerts } from "./compute";
 import type { Match } from "@/types";
 
 /**
@@ -15,14 +14,6 @@ const sentKey = (k: string) => `ff:notif:sent:${k}`;
 /** Retained history + how long a "sent" marker blocks a duplicate. */
 const CAP = 100;
 const TTL_SEC = 60 * 60 * 24 * 3;
-/** Fire the pre-match ping once a game is within this window of kickoff. */
-const PREMATCH_WINDOW_MS = 60 * 60 * 1000;
-/**
- * Only announce a result for a game that *just* finished — measured from
- * kickoff (a match ends ~2h after KO, so this catches the ~2h after full time).
- * Prevents the first scan from re-announcing the entire tournament history.
- */
-const RESULT_MAX_AGE_MS = 4 * 60 * 60 * 1000;
 
 export type NotifType = "prematch" | "result" | "join";
 
@@ -108,56 +99,21 @@ export async function getEvents(since = 0): Promise<NotifEvent[]> {
  */
 export async function scanMatches(matches: Match[], now: number): Promise<NotifEvent[]> {
   const created: NotifEvent[] = [];
-
-  for (const m of matches) {
-    if (!m.homeTeamId || !m.awayTeamId) continue;
-    const koMs = Date.parse(m.kickoff);
-    if (Number.isNaN(koMs)) continue;
-
-    const home = getTeam(m.homeTeamId);
-    const away = getTeam(m.awayTeamId);
-    const untilKo = koMs - now;
-
-    // Pre-match ping, once the game enters the one-hour window.
-    if (untilKo > 0 && untilKo <= PREMATCH_WINDOW_MS) {
-      if (await claimOnce(`pre:${m.id}`)) {
-        const mins = Math.max(1, Math.round(untilKo / 60_000));
-        created.push(
-          await pushEvent({
-            id: `pre:${m.id}`,
-            type: "prematch",
-            kind: "kickoff",
-            title: `Kicks off in ${mins} min`,
-            body: `${home?.name ?? "Home"} vs ${away?.name ?? "Away"} is about to start — lock your predictions and get in the room.`,
-            matchId: m.id,
-            href: `/match/${m.id}`,
-            accent: "var(--gold)",
-          })
-        );
-      }
-    }
-
-    // Full-time result with the score, for a game that just finished.
-    const finished = statusFromClock(m.kickoff, now).status === "finished";
-    const recentlyFinished = finished && now - koMs <= RESULT_MAX_AGE_MS;
-    if (recentlyFinished && m.homeScore != null && m.awayScore != null) {
-      if (await claimOnce(`res:${m.id}`)) {
-        const line = `${home?.code ?? "HOM"} ${m.homeScore}–${m.awayScore} ${away?.code ?? "AWY"}`;
-        created.push(
-          await pushEvent({
-            id: `res:${m.id}`,
-            type: "result",
-            kind: "fulltime",
-            title: `Full time — ${line}`,
-            body: `${home?.name ?? "Home"} ${m.homeScore}–${m.awayScore} ${away?.name ?? "Away"}. See how the room's predictions held up.`,
-            matchId: m.id,
-            href: `/match/${m.id}`,
-            accent: "var(--pitch)",
-          })
-        );
-      }
+  for (const a of computeDueAlerts(matches, now)) {
+    if (await claimOnce(a.id)) {
+      created.push(
+        await pushEvent({
+          id: a.id,
+          type: a.type,
+          kind: a.kind,
+          title: a.title,
+          body: a.body,
+          matchId: a.matchId,
+          href: a.href,
+          accent: a.accent,
+        })
+      );
     }
   }
-
   return created;
 }

@@ -5,41 +5,83 @@ import { SEED_PRESENCE, ORACLE_PROFILE } from "@/lib/data/people";
 import { useUserStore } from "@/stores/user";
 import { REACTIONS } from "@/lib/constants";
 import { seededRandom, hashSeed } from "@/lib/utils";
-import { roomsLive, heartbeat } from "@/lib/rooms/client";
+import { roomsLive, heartbeat as apiHeartbeat } from "@/lib/rooms/client";
+import { firebaseEnabled } from "@/lib/firebase/config";
 
 /** Heartbeat cadence — also the demo simulation tick. */
 const BEAT_MS = 4500;
+/** Firebase heartbeat cadence (Firestore writes; a touch slower). */
+const FB_BEAT_MS = 10_000;
 
 /**
- * Live presence for a room. When a real backend is configured it reflects the
- * actual people in the room (with their real nicknames); otherwise it falls
- * back to simulated friend activity so the demo always feels populated.
+ * Live presence for a room. Three tiers, in priority order:
+ *  1. Firebase (Firestore realtime) — reflects the actual people in the room
+ *     the instant they join or leave. This is what fixes the Lounge.
+ *  2. The lightweight API backend (Upstash/in-memory) — heartbeat + poll.
+ *  3. Demo simulation — deterministic fake friends so the app never feels empty.
  */
 export function usePresence(roomId: string) {
   const profile = useUserStore((s) => s.profile);
   const [tick, setTick] = useState(0);
-  const [live, setLive] = useState(false);
+  const [real, setReal] = useState(firebaseEnabled);
   const [remote, setRemote] = useState<PresenceMember[]>([]);
 
-  // Demo simulation heartbeat (only meaningful when not live).
+  const prof = useRef(profile);
+  prof.current = profile;
+
+  // Demo simulation heartbeat (only meaningful when not on a real backend).
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), BEAT_MS);
     return () => clearInterval(id);
   }, []);
 
-  // Real presence: announce myself on a heartbeat and read back who's here.
-  const prof = useRef(profile);
-  prof.current = profile;
+  // Tier 1 — Firebase realtime presence.
   useEffect(() => {
+    if (!firebaseEnabled) return;
+    let cleanup = () => {};
+    let hb: ReturnType<typeof setInterval>;
+    let stopped = false;
+
+    import("@/lib/firebase/presence").then((fp) => {
+      if (stopped) return;
+      const unsub = fp.subscribePresence(roomId, (members) =>
+        setRemote(members.filter((m) => m.userId !== prof.current.id))
+      );
+      const beat = () =>
+        fp.heartbeat(roomId, {
+          userId: prof.current.id,
+          name: prof.current.name,
+          avatar: prof.current.avatar,
+          favoriteTeamId: prof.current.favoriteTeamId,
+        });
+      beat();
+      hb = setInterval(beat, FB_BEAT_MS);
+      cleanup = () => {
+        unsub();
+        clearInterval(hb);
+        fp.leave(roomId, prof.current.id);
+      };
+    });
+
+    return () => {
+      stopped = true;
+      clearInterval(hb);
+      cleanup();
+    };
+  }, [roomId]);
+
+  // Tier 2 — API backend heartbeat (only when Firebase isn't configured).
+  useEffect(() => {
+    if (firebaseEnabled) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
 
     roomsLive().then((isLive) => {
       if (stopped || !isLive) return;
-      setLive(true);
+      setReal(true);
       const beat = async () => {
         const p = prof.current;
-        const members = await heartbeat(roomId, {
+        const members = await apiHeartbeat(roomId, {
           userId: p.id,
           name: p.name,
           avatar: p.avatar,
@@ -68,7 +110,7 @@ export function usePresence(roomId: string) {
       matchId: roomId,
     };
 
-    if (live) {
+    if (real) {
       // Real members + the Oracle as a persistent AI participant.
       const oracle: PresenceMember = {
         userId: "oracle",
@@ -92,7 +134,7 @@ export function usePresence(roomId: string) {
       };
     });
     return [you, ...others];
-  }, [live, remote, profile.id, profile.name, profile.avatar, roomId, tick]);
+  }, [real, remote, profile.id, profile.name, profile.avatar, roomId, tick]);
 
   const inCall = members.filter((m) => m.status === "in_call").length;
   const watching = members.filter(

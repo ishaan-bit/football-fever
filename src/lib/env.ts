@@ -47,6 +47,12 @@ export const env = {
     apiKey: str(process.env.ANTHROPIC_API_KEY),
     model: str(process.env.ANTHROPIC_MODEL) ?? "claude-opus-4-8",
   },
+
+  firebase: {
+    projectId: str(process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID),
+    apiKey: str(process.env.NEXT_PUBLIC_FIREBASE_API_KEY),
+    appId: str(process.env.NEXT_PUBLIC_FIREBASE_APP_ID),
+  },
 } as const;
 
 /** Feature flags derived from configured secrets. */
@@ -73,10 +79,15 @@ export const features = {
   get anthropic() {
     return Boolean(env.anthropic.apiKey);
   },
+  /** Firebase (Firestore) — the real backend for presence, chat and alerts. */
+  get firebase() {
+    return Boolean(env.firebase.projectId && env.firebase.apiKey && env.firebase.appId);
+  },
 };
 
 /** Client-safe view of which integrations are live (no secrets leak). */
 export const publicFeatures = {
   supabase: Boolean(env.supabase.url && env.supabase.anonKey),
   livekit: Boolean(env.livekit.url),
+  firebase: Boolean(env.firebase.projectId && env.firebase.apiKey && env.firebase.appId),
 };

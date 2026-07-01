@@ -17,6 +17,7 @@ export async function GET() {
       supabase: features.supabase,
       livekit: features.livekit,
       redis: features.redis,
+      firebase: features.firebase,
       anthropic: features.anthropic,
     },
   });

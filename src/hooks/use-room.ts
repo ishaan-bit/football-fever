@@ -8,6 +8,7 @@ import { hostOnEvent, hostWelcome, hostIdleNudge } from "@/lib/ai/host";
 import { statusFromClock } from "@/lib/data";
 import { seededRandom, hashSeed } from "@/lib/utils";
 import { roomsLive, fetchMessages, publishMessage } from "@/lib/rooms/client";
+import { firebaseEnabled } from "@/lib/firebase/config";
 
 const AMBIENT_LINES = [
   "this ref is having a mare 😤",
@@ -54,25 +55,46 @@ export function useRoom(roomId: string, options: UseRoomOptions = {}) {
   const pinnedIds = useSocialStore((s) => s.pinned[roomId]) ?? [];
 
   const [typing, setTyping] = useState<Record<string, number>>({});
-  const [live, setLive] = useState(false);
-  const liveRef = useRef(false);
+  // Firebase, when configured, is the real backend — treat it as "live" so the
+  // demo bots stay quiet and real people carry the room.
+  const [live, setLive] = useState(firebaseEnabled);
+  const liveRef = useRef(firebaseEnabled);
   const channelRef = useRef<BroadcastChannel | null>(null);
   const announced = useRef<Set<string> | null>(null);
   const welcomed = useRef(false);
   const sinceRef = useRef(0);
+  const fbRef = useRef<typeof import("@/lib/firebase/rooms") | null>(null);
 
-  // Detect whether a real backend is available (memoized across the app).
+  // Detect whether the API backend is available (skipped when Firebase is on).
   useEffect(() => {
+    if (firebaseEnabled) return;
     roomsLive().then((isLive) => {
       liveRef.current = isLive;
       setLive(isLive);
     });
   }, []);
 
-  // Live mode: poll the backend for messages from real people and merge them
-  // (de-duped by id) into the shared store. Runs only when a backend exists.
+  // Firebase chat: subscribe to realtime messages and merge them (de-duped).
   useEffect(() => {
-    if (!live) return;
+    if (!firebaseEnabled) return;
+    let stopped = false;
+    let unsub = () => {};
+    import("@/lib/firebase/rooms").then((mod) => {
+      if (stopped) return;
+      fbRef.current = mod;
+      unsub = mod.subscribeMessages(roomId, (msgs) => store.mergeMessages(roomId, msgs));
+    });
+    return () => {
+      stopped = true;
+      unsub();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId]);
+
+  // Live mode: poll the API backend for messages and merge them (de-duped).
+  // Skipped when Firebase is on (that path uses realtime subscriptions above).
+  useEffect(() => {
+    if (firebaseEnabled || !live) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
@@ -213,11 +235,14 @@ export function useRoom(roomId: string, options: UseRoomOptions = {}) {
         body,
         ...extra,
       });
-      if (liveRef.current) {
-        // Broadcast to real people across devices via the backend. Our own
-        // message is added optimistically above; the next poll will echo it
-        // back and merge de-dupes it by id, so we don't advance the cursor here
-        // (avoids skipping others' messages under clock skew).
+      if (firebaseEnabled) {
+        // Realtime fan-out to everyone in the room; the snapshot echoes our own
+        // message back and merge de-dupes it by id.
+        if (fbRef.current) fbRef.current.publishMessage(roomId, msg);
+        else import("@/lib/firebase/rooms").then((m) => m.publishMessage(roomId, msg));
+      } else if (liveRef.current) {
+        // API backend: our optimistic copy is added above; the next poll echoes
+        // it back and merge de-dupes by id (no cursor bump — avoids clock skew).
         publishMessage(roomId, msg);
       } else {
         // Demo mode: same-browser cross-tab echo.
