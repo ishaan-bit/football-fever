@@ -8,7 +8,12 @@ import { firebaseEnabled } from "@/lib/firebase/config";
  * On iOS this requires the app to be installed to the home screen (16.4+).
  */
 
-const vapidPublic = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+// Strip any stray BOM/whitespace the env value may carry (piped-in secrets).
+const vapidPublic = (() => {
+  let v = (process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "").trim();
+  while (v.charCodeAt(0) === 0xfeff) v = v.slice(1).trim();
+  return v || undefined;
+})();
 
 export const pushSupported = () =>
   typeof window !== "undefined" &&

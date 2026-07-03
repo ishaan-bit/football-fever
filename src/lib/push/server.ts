@@ -20,9 +20,17 @@ import { serverDb } from "@/lib/firebase/server-db";
  * client scan or a server scan created it.
  */
 
-const vapidPublic = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-const vapidPrivate = process.env.VAPID_PRIVATE_KEY;
-const vapidSubject = process.env.VAPID_SUBJECT ?? "mailto:admin@example.com";
+/** Env values can arrive with a stray BOM/whitespace (e.g. piped-in secrets). */
+const cleanEnv = (v: string | undefined): string | undefined => {
+  if (!v) return undefined;
+  let t = v.trim();
+  while (t.charCodeAt(0) === 0xfeff) t = t.slice(1).trim();
+  return t || undefined;
+};
+
+const vapidPublic = cleanEnv(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY);
+const vapidPrivate = cleanEnv(process.env.VAPID_PRIVATE_KEY);
+const vapidSubject = cleanEnv(process.env.VAPID_SUBJECT) ?? "mailto:admin@example.com";
 
 export const pushConfigured = Boolean(vapidPublic && vapidPrivate);
 
