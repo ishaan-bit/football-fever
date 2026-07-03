@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPeople, registerPerson, isLiveRooms } from "@/lib/rooms/store";
-import { pushEvent } from "@/lib/notifications/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,19 +40,6 @@ export async function POST(req: NextRequest) {
     favoriteTeamId: clip(body.favoriteTeamId, 16),
   });
 
-  // Announce a real newcomer to the room (skip default/guest identities).
-  if (isNew && name !== "You") {
-    await pushEvent({
-      id: `join:${userId}:${person.firstSeen}`,
-      type: "join",
-      kind: "friend_joined",
-      title: `${name} joined the party`,
-      body: `${name} just pulled up to Football Fever. Say hi 👋`,
-      href: "/",
-      accent: "var(--electric)",
-      userId,
-    });
-  }
-
+  // (Newcomer "joined" pings are published via Firebase — see firebase/notifications.)
   return NextResponse.json({ live: true, person, isNew }, noStore);
 }

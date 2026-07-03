@@ -2,23 +2,20 @@
 import { useEffect, useRef } from "react";
 import { useUserStore } from "@/stores/user";
 import { useNotificationStore } from "@/stores/notifications";
-import { roomsLive, registerMe } from "@/lib/rooms/client";
-import { fetchNotifications, triggerScan, type NotifEventDTO } from "@/lib/notifications/client";
+import type { NotifEventDTO } from "@/lib/notifications/client";
 import { firebaseEnabled } from "@/lib/firebase/config";
 import { toast } from "@/components/ui/sonner";
 
-const POLL_MS = 30_000;
 /** How often an active client runs the scheduler scan. */
 const SCAN_MS = 3 * 60_000;
-/** API tier: on first poll, backfill the bell with the last hour (no toast). */
-const BACKFILL_MS = 60 * 60 * 1000;
 
 /**
- * App-wide notifications engine with three tiers (Firebase → API → dormant):
+ * App-wide notifications engine, backed entirely by Firebase (Firestore). It:
  *  - records the current user in the community roster (who shows up),
  *  - surfaces match alerts (kickoff soon / full-time score) + social pings as an
  *    in-app toast, the bell, and an OS notification when permission is granted,
- *  - runs the scheduler scan so alerts fire without relying on Vercel Cron.
+ *  - runs an idempotent, client-driven scan so alerts fire without a server cron.
+ * Dormant when Firebase isn't configured.
  */
 export function useNotificationsFeed() {
   const profile = useUserStore((s) => s.profile);
@@ -70,31 +67,23 @@ export function useNotificationsFeed() {
     };
   }, [pushNote]);
 
-  // Register in the roster (both tiers), and announce a genuine newcomer.
+  // Register in the roster and announce a genuine newcomer.
   useEffect(() => {
+    if (!firebaseEnabled) return;
     let stop = false;
     (async () => {
       const p = prof.current;
       if (!p.name || p.name === "You") return;
-      if (firebaseEnabled) {
-        const people = await import("@/lib/firebase/people");
-        const { isNew } = await people.registerPerson({
-          userId: p.id,
-          name: p.name,
-          avatar: p.avatar,
-          favoriteTeamId: p.favoriteTeamId,
-        });
-        if (isNew && !stop) {
-          const notif = await import("@/lib/firebase/notifications");
-          notif.publishJoin(p.id, p.name);
-        }
-      } else if (await roomsLive()) {
-        registerMe({
-          userId: p.id,
-          name: p.name,
-          avatar: p.avatar,
-          favoriteTeamId: p.favoriteTeamId,
-        });
+      const people = await import("@/lib/firebase/people");
+      const { isNew } = await people.registerPerson({
+        userId: p.id,
+        name: p.name,
+        avatar: p.avatar,
+        favoriteTeamId: p.favoriteTeamId,
+      });
+      if (isNew && !stop) {
+        const notif = await import("@/lib/firebase/notifications");
+        notif.publishJoin(p.id, p.name);
       }
     })();
     return () => {
@@ -102,7 +91,17 @@ export function useNotificationsFeed() {
     };
   }, [profile.id, profile.name, profile.avatar, profile.favoriteTeamId]);
 
-  // Tier 1 — Firebase realtime feed + client-driven scan.
+  // If OS alerts were already granted, keep this device's push subscription
+  // registered (endpoints rotate; the stored copy must stay current).
+  useEffect(() => {
+    if (!firebaseEnabled) return;
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    import("@/lib/push/client").then(({ ensurePushSubscription }) =>
+      ensurePushSubscription({ id: prof.current.id, name: prof.current.name })
+    );
+  }, [profile.id, profile.name]);
+
+  // Realtime feed + client-driven scheduler scan.
   useEffect(() => {
     if (!firebaseEnabled) return;
     let stopped = false;
@@ -126,39 +125,6 @@ export function useNotificationsFeed() {
       stopped = true;
       unsub();
       clearInterval(scanTimer);
-    };
-  }, []);
-
-  // Tier 2 — API backend feed (only when Firebase isn't configured).
-  useEffect(() => {
-    if (firebaseEnabled) return;
-    let stop = false;
-    let timer: ReturnType<typeof setTimeout>;
-    let ticks = 0;
-    let first = true;
-    let since = 0;
-    let live = false;
-
-    const loop = async () => {
-      if (first) live = await roomsLive();
-      if (live && !(typeof document !== "undefined" && document.hidden)) {
-        if (ticks % 6 === 0) await triggerScan();
-        ticks++;
-        const from = first ? Date.now() - BACKFILL_MS : since;
-        const { events, now } = await fetchNotifications(from);
-        if (!stop) {
-          for (const e of events) surfaceRef.current(e, !first);
-          since = now;
-          first = false;
-        }
-      }
-      timer = setTimeout(loop, POLL_MS);
-    };
-
-    timer = setTimeout(loop, 1200);
-    return () => {
-      stop = true;
-      clearTimeout(timer);
     };
   }, []);
 }

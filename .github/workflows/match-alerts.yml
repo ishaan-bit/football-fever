@@ -1,0 +1,24 @@
+# Frequent scheduler for match alerts. Vercel Hobby only allows a daily cron,
+# so this free GitHub Actions cron drives the scan often enough for "kicks off
+# in an hour" pings and full-time scores — including Web Push to devices with
+# the app fully closed. The endpoint is public, idempotent and deduped, so
+# overlapping runs (or client-driven scans) are harmless.
+#
+# Note: GitHub may delay scheduled runs by a few minutes under load, and
+# auto-disables schedules after 60 days without repo activity.
+name: match-alerts
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Hit the notification scan endpoint
+        run: |
+          curl -sS -m 90 --retry 2 --retry-delay 5 \
+            "https://football-fever-ten.vercel.app/api/notifications/scan"

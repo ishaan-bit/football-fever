@@ -41,5 +41,18 @@ service cloud.firestore {
         && request.resource.data.body is string
         && request.resource.data.body.size() <= 500;
     }
+
+    // Web Push subscriptions (device endpoints for app-closed OS alerts).
+    // Sending still requires the server's VAPID private key, so exposure of an
+    // endpoint alone does not let a third party push to it.
+    match /pushSubs/{subId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.endpoint is string
+        && request.resource.data.endpoint.size() > 0
+        && request.resource.data.endpoint.size() <= 1000
+        && request.resource.data.keys is map;
+      // The dispatcher prunes dead (410 Gone) subscriptions.
+      allow delete: if true;
+    }
   }
 }

@@ -1,35 +1,40 @@
 import { NextResponse } from "next/server";
 import { loadMatches } from "@/lib/worldcup";
-import { scanMatches } from "@/lib/notifications/server";
-import { isLiveRooms } from "@/lib/rooms/store";
+import { scanToFirestore } from "@/lib/firebase/server-scan";
+import { firebaseEnabled } from "@/lib/firebase/config";
+import { dispatchUnpushed, pushConfigured } from "@/lib/push/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 /**
- * The scheduler tick. Vercel Cron hits this on a schedule (see vercel.json), and
- * active clients also poke it as a fallback so alerts still fire without Cron.
- * It's idempotent — every alert is deduped server-side — and naturally rate
- * limited by the ~15s cache on the upstream match feed, so extra calls are cheap.
+ * The scheduler tick — hit by the GitHub Actions cron (~10 min), the daily
+ * Vercel cron, and active clients. Two idempotent steps:
+ *  1. Scan the fixtures and write any now-due alerts to Firestore (deduped by
+ *     deterministic doc id, shared with the client-driven scan).
+ *  2. Web-push every recent alert that hasn't been pushed yet to all stored
+ *     subscriptions — this is what reaches phones with the app fully closed —
+ *     then stamp it `pushedAt` so it never pushes twice.
  */
 export async function GET() {
   const now = Date.now();
-  if (!isLiveRooms()) {
-    return NextResponse.json(
-      { live: false, created: 0 },
-      { headers: { "Cache-Control": "no-store" } }
-    );
+  const noStore = { headers: { "Cache-Control": "no-store" } };
+  if (!firebaseEnabled) {
+    return NextResponse.json({ enabled: false, created: 0 }, noStore);
   }
   const matches = await loadMatches(now);
-  const created = await scanMatches(matches, now);
+  const created = await scanToFirestore(matches, now);
+  const push = await dispatchUnpushed();
   return NextResponse.json(
     {
-      live: true,
+      enabled: true,
       scanned: matches.length,
       created: created.length,
       events: created.map((e) => ({ id: e.id, type: e.type, title: e.title })),
+      push: { configured: pushConfigured, ...push },
       now,
     },
-    { headers: { "Cache-Control": "no-store" } }
+    noStore
   );
 }

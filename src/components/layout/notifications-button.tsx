@@ -9,6 +9,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/shared/icon";
 import { useNotificationStore, NOTIFICATION_ICON } from "@/stores/notifications";
+import { useUserStore } from "@/stores/user";
+import { ensurePushSubscription } from "@/lib/push/client";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { relativeTime, hslVar } from "@/lib/utils";
 import { useNow } from "@/hooks/use-now";
@@ -32,7 +34,8 @@ export function NotificationsButton() {
   const { buzz } = useHaptics();
 
   // OS-level alert permission (kickoff pings + full-time scores surface even
-  // when the tab is backgrounded). We only prompt on an explicit tap.
+  // when the app is closed). We only prompt on an explicit tap.
+  const profile = useUserStore((s) => s.profile);
   const [perm, setPerm] = useState<NotificationPermission | "unsupported">("unsupported");
   useEffect(() => {
     if (typeof Notification !== "undefined") setPerm(Notification.permission);
@@ -42,7 +45,12 @@ export function NotificationsButton() {
     play("click");
     buzz("tap");
     try {
-      setPerm(await Notification.requestPermission());
+      const next = await Notification.requestPermission();
+      setPerm(next);
+      // Register this device for true background push (app closed).
+      if (next === "granted") {
+        ensurePushSubscription({ id: profile.id, name: profile.name });
+      }
     } catch {
       /* dismissed */
     }
